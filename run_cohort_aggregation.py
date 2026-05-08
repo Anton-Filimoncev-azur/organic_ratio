@@ -64,7 +64,7 @@ def build_ordered_feature_scans(cfg) -> dict:
 
 def main() -> None:
     cfg = load_config()
-    cohort_keys = list(cfg.cohort.keys)
+    cohort_keys = list(cfg.cohort["keys"])
     print(f"Cohort keys: {cohort_keys}")
 
     ordered_scans = build_ordered_feature_scans(cfg)
