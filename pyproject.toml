@@ -1,0 +1,12 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "organic_ratio"
+version = "0.0.1"
+description = "Hierarchical Bayesian model of cohort-level organic share over first 7 days."
+requires-python = ">=3.10"
+
+[tool.setuptools.packages.find]
+where = ["src"]

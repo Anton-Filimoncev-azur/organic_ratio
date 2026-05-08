@@ -1,0 +1,60 @@
+# =========================
+# Data & artifacts (never commit)
+# =========================
+data/
+*.parquet
+*.pt
+*.npy
+*.ckpt
+*.joblib
+mlruns/
+mlflow_artifacts/
+
+# =========================
+# Secrets / local config
+# =========================
+.env
+conf/local/
+conf/batch_training/.tmp/
+
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# =========================
+# Virtualenvs
+# =========================
+.venv/
+venv/
+env/
+
+# =========================
+# Jupyter
+# =========================
+.ipynb_checkpoints/
+
+# =========================
+# IDE / OS
+# =========================
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# =========================
+# Logs
+# =========================
+*.log
+info.log

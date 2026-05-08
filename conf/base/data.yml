@@ -1,0 +1,55 @@
+datasets:
+
+  installs:
+    type: parquet
+    s3_path: s3://${s3.bucket}/${s3.root}/installs.parquet
+    local_raw_dir: ${paths.raw}/partition
+    local_feature_dir: ${paths.features}/partition
+    filename: installs.parquet
+
+  ads:
+    type: parquet
+    s3_path: s3://${s3.bucket}/${s3.root}/ads.parquet
+    local_raw_dir: ${paths.raw}/partition
+    local_feature_dir: ${paths.features}/partition
+    filename: ads.parquet
+
+  iap:
+    type: parquet
+    s3_path: s3://${s3.bucket}/${s3.root}/iap.parquet
+    local_raw_dir: ${paths.raw}/partition
+    local_feature_dir: ${paths.features}/partition
+    filename: iap.parquet
+
+  devices:
+    type: parquet
+    s3_path: s3://${s3.bucket}/${s3.root}/devices.parquet
+    local_raw_dir: ${paths.raw}/partition
+    local_feature_dir: ${paths.features}/partition
+    filename: devices.parquet
+
+  costs:
+    type: parquet
+    s3_path: s3://${s3.bucket}/${s3.root}/costs.parquet
+    local_raw_dir: ${paths.raw}/partition
+    local_feature_dir: ${paths.features}/partition
+    filename: costs.parquet
+
+  sessions:
+    type: parquet
+    s3_path: s3://${s3.bucket}/${s3.root}/sessions.parquet
+    local_raw_dir: ${paths.raw}/partition
+    local_feature_dir: ${paths.features}/partition
+    filename: sessions.parquet
+
+  personal:
+    type: parquet
+    s3_path: s3://${s3.bucket}/${s3.root}/personal.parquet
+    local_raw_dir: ${paths.raw}/partition
+    local_feature_dir: ${paths.features}/partition
+    filename: personal.parquet
+
+  cohort_level:
+    type: parquet
+    local_feature_dir: ${paths.features}/cohort
+    filename: cohort_level.parquet

@@ -1,0 +1,116 @@
+# =========================
+# INFO
+# =========================
+
+info: 'organic_ratio: cohort-level (country x media_source x platform x install_date) features over first 7 days'
+
+# =========================
+# COHORT KEYS
+# =========================
+
+cohort:
+  keys:
+    - country_code
+    - media_source
+    - platform
+    - install_date
+
+# =========================
+# SPLIT DATA PARAMETERS
+# =========================
+
+split_column: install_date
+gap_days_split: 14
+
+train_start_date: 2024-11-01
+test_start_date: 2025-05-01
+test_end_date: 2025-06-01
+
+# =========================
+# CATEGORICAL FEATURES (cohort-grain after aggregation;
+# at user-grain stage they are passed through unchanged)
+# =========================
+
+categorical:
+  columns:
+    - country_code
+    - platform
+    - media_source
+    - campaign
+    - af_adset
+    - af_channel
+    - app_version
+    - carrier
+
+# =========================
+# NUMERICAL FEATURES
+# =========================
+
+numerical:
+  columns:
+    # ===== IAP timing / conversion =====
+    - time_to_first_iap_minutes
+    - time_first_and_second_iap_minutes
+    - has_second_iap
+    - time_between_iap_2_3
+
+    # ===== Session behavior =====
+    - n_sessions_total
+    - active_days_7d
+    - weekend_sessions
+    - density_1d
+    - density_3d
+    - density_7d
+    - sessions_d1
+    - session_velocity_slope
+    - last_active_day
+    - lag_first_session
+    - lag_last_session
+    - session_span_days
+    - avg_gap_day7
+    - med_gap_day7
+    - max_gap_day7
+
+    # ===== UA / marketing =====
+    - spend
+    - impressions
+    - clicks
+    - ctr
+    - cvr
+    - cpm
+
+    # ===== ADS monetization =====
+    - log1p_ads_cum_learn
+    - ads_days_with_purchase_learn
+    - ads_purchase_count_learn
+    - ads_avg_check_learn
+    - ads_rev_d1
+    - ads_rev_d3
+
+    # ===== IAP monetization =====
+    - log1p_iap_cum_learn
+    - iap_days_with_purchase_learn
+    - iap_purchase_count_learn
+    - rev_d1_iap
+    - rev_d3_iap
+    - d1_share_iap
+    - avg_check_d1_3_iap
+    - avg_check_d4_7_iap
+    - acceleration_iap
+
+    # ===== Dependency features =====
+    - iap_rev_per_session
+    - ads_to_iap_ratio
+    - ads_per_active_day
+
+# =========================
+# SEQUENCE FEATURES (per-day arrays sessions_X / iap_X / iap_count_X / iap_check_size_X)
+# Kept at user-grain so cohort aggregator can collapse per-day.
+# =========================
+
+sequence:
+  columns:
+    - iap
+    - iap_count
+    - iap_check_size
+    - sessions

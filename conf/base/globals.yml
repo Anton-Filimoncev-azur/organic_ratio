@@ -1,0 +1,21 @@
+# =========================
+# GLOBAL VARIABLES
+# =========================
+project:
+  name: kclash
+  predict_target: 'organic'   # cohort-level organic share
+  max_horizon: 7              # observation window for cohort
+  horizons: [7]
+  learn_days_min: 7
+  learn_days_max: 7
+  root: .
+
+
+s3:
+  bucket: az-jupyterhub-share-ik6ahsi9
+  root: azur_ml_core/${project.name}/partition
+
+paths:
+  data: ${project.root}/data
+  raw: ${paths.data}/raw
+  features: ${paths.data}/features
