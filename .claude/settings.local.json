@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -oP '\"role\":\"user\",\"content\":\\\\[\\\\{\"type\":\"text\",\"text\":\"[^\"]{0,500}' \"/c/Users/ANTON/Desktop/chat.jsonl\" | head -50)",
+      "Read(//c/Users/ANTON/Desktop/**)",
+      "Bash(LC_ALL=C grep -oP '\"role\":\"user\",\"content\":\\\\[\\\\{\"type\":\"text\",\"text\":\"[^\"]{0,500}' \"/c/Users/ANTON/Desktop/chat.jsonl\")",
+      "Bash(cd \"/c/Users/ANTON/Desktop/AZUR/KEDRO/organic_ratio\" && find . -type f | grep -v __pycache__ | sort)",
+      "Read(//c/c/Users/ANTON/Desktop/AZUR/KEDRO/**)"
+    ]
+  }
+}
