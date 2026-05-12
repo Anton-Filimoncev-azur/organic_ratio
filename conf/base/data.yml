@@ -58,3 +58,9 @@ datasets:
     type: parquet
     local_feature_dir: ${paths.features}/targets
     filename: targets.parquet
+
+    train_dir: ${paths.data}/train
+    train_filename: targets_train.parquet
+
+    test_dir: ${paths.data}/test
+    test_filename: targets_test.parquet
