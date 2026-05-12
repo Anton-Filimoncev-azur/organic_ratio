@@ -16,6 +16,13 @@ cohort:
     - install_date
 
 # =========================
+# CLEANING
+# =========================
+
+cleaning:
+  min_total_installs: 30   # drop cohorts smaller than this (target = noisy Bernoulli)
+
+# =========================
 # SPLIT DATA PARAMETERS
 # =========================
 

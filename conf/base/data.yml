@@ -61,6 +61,8 @@ datasets:
 
     train_dir: ${paths.data}/train
     train_filename: targets_train.parquet
+    train_clean_filename: targets_train_clean.parquet
 
     test_dir: ${paths.data}/test
     test_filename: targets_test.parquet
+    test_clean_filename: targets_test_clean.parquet
