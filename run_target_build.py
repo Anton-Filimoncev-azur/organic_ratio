@@ -1,10 +1,15 @@
 """
-Target build: organic_share at cohort grain (cohort.keys MINUS media_source).
+Build model-ready train / test tables.
 
-Reads preprocessed installs features (per-user rows with media_source),
-groups by target keys, computes total/organic installs and organic_share,
-tags rows with train/test/unused based on install_date thresholds from
-parameters.yml.
+1. Compute target (organic_share + install counts + split) at target grain
+   (cohort.keys MINUS media_source) from preprocessed installs.
+2. Re-aggregate user-grain features (merge of all per-source parquets) at the
+   SAME target grain — single SUM/MEAN aggregation, no media_source.
+3. Join target ⨝ features on target keys.
+4. Write:
+       data/features/targets/targets.parquet     # full table with `split` column
+       data/train/targets_train.parquet          # split=='train', no split column
+       data/test/targets_test.parquet            # split=='test',  no split column
 
 Run from project root:
     python run_target_build.py
@@ -27,7 +32,13 @@ if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 
 from organic_ratio.utils.config import load_config
+from organic_ratio.core.cohort.merge import merge_datasets
+from organic_ratio.core.cohort.aggregator import aggregate_to_cohort
+from organic_ratio.core.cohort.sources import build_ordered_feature_scans
 from organic_ratio.core.cohort.target import build_target, derive_target_keys
+
+
+USER_KEYS = ["match_id", "install_date"]
 
 
 def main() -> None:
@@ -35,19 +46,19 @@ def main() -> None:
 
     cohort_keys = list(cfg.cohort["keys"])
     target_keys = derive_target_keys(cohort_keys)
-    print(f"Cohort keys: {cohort_keys}")
-    print(f"Target keys (media_source dropped): {target_keys}")
+    print(f"Cohort keys:  {cohort_keys}")
+    print(f"Target keys:  {target_keys}  (media_source dropped)")
 
+    # ---------- 1. Target ----------
     installs_cfg = cfg.datasets.installs
     installs_path = Path(installs_cfg.local_feature_dir) / installs_cfg.filename
     if not installs_path.exists():
         raise FileNotFoundError(f"Installs features not found: {installs_path}")
-    print(f"Reading installs: {installs_path}")
+    print(f"\nReading installs: {installs_path}")
 
     installs_lf = pl.scan_parquet(installs_path).select(
         target_keys + ["media_source"]
     )
-
     target_lf = build_target(
         installs_lf,
         target_keys=target_keys,
@@ -56,24 +67,35 @@ def main() -> None:
         test_end_date=cfg.test_end_date,
     )
 
-    df = target_lf.collect(engine="streaming")
-    print(f"Target table shape: {df.shape}")
-    print(df.head(10))
+    # ---------- 2. Features at target grain ----------
+    print("\nBuilding features at target grain:")
+    ordered_scans = build_ordered_feature_scans(cfg)
+    user_lf = merge_datasets(
+        lfs=ordered_scans,
+        on=USER_KEYS,
+        how="left",
+    )
+    features_lf = aggregate_to_cohort(user_lf, target_keys)
+
+    # ---------- 3. Join target + features ----------
+    full_lf = target_lf.join(features_lf, on=target_keys, how="left")
+    df = full_lf.collect(engine="streaming")
+    print(f"\nFull table shape: {df.shape}")
+    print(df.head(5))
     print("\nSplit counts:")
     print(df["split"].value_counts())
     print("\norganic_share summary:")
     print(df["organic_share"].describe())
 
+    # ---------- 4. Write outputs ----------
     out_cfg = cfg.datasets.targets
 
-    # 1. Full table (with `split` column) — source of truth
-    out_dir = Path(out_cfg.local_feature_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / out_cfg.filename
-    df.write_parquet(out_path, compression="zstd")
-    print(f"Saved full:  {out_path}  ({len(df)} rows)")
+    full_dir = Path(out_cfg.local_feature_dir)
+    full_dir.mkdir(parents=True, exist_ok=True)
+    full_path = full_dir / out_cfg.filename
+    df.write_parquet(full_path, compression="zstd")
+    print(f"\nSaved full:  {full_path}  ({len(df)} rows, {df.width} cols)")
 
-    # 2. Physical train / test splits
     train_df = df.filter(pl.col("split") == "train").drop("split")
     test_df = df.filter(pl.col("split") == "test").drop("split")
 

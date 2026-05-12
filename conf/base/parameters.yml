@@ -2,7 +2,7 @@
 # INFO
 # =========================
 
-info: 'organic_ratio: cohort-level (platform x media_source x country x campaign x install_date) features over first 7 days'
+info: 'organic_ratio: cohort-level (platform x media_source x country x install_date) features over first 7 days'
 
 # =========================
 # COHORT KEYS
@@ -13,7 +13,6 @@ cohort:
     - platform
     - media_source
     - country_code
-    - campaign
     - install_date
 
 # =========================
