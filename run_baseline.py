@@ -1,0 +1,156 @@
+"""
+Baseline runner: weighted Ridge on logit(organic_share).
+
+Reads:
+    data/train/targets_train_clean.parquet
+    data/test/targets_test_clean.parquet
+Writes:
+    data/predictions/baseline_train.parquet
+    data/predictions/baseline_test.parquet
+    data/plots/baseline_calibration.png
+    data/plots/baseline_coefficients.png
+
+Run from project root:
+    python run_baseline.py
+"""
+from dotenv import load_dotenv
+load_dotenv()
+
+import sys
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import polars as pl
+
+SRC_PATH = Path.cwd() / "src"
+print("Adding SRC_PATH:", SRC_PATH)
+
+if not SRC_PATH.exists():
+    raise RuntimeError(f"src not found at {SRC_PATH}")
+
+if str(SRC_PATH) not in sys.path:
+    sys.path.insert(0, str(SRC_PATH))
+
+import matplotlib
+matplotlib.use("Agg")  # headless
+import matplotlib.pyplot as plt
+
+from organic_ratio.utils.config import load_config
+from organic_ratio.core.modeling.baseline import (
+    fit_baseline,
+    predict_baseline,
+    coefficient_importance,
+)
+from organic_ratio.core.modeling.metrics import report
+
+
+def calibration_plot(y_true, y_pred, weight, save_path: Path, bins: int = 20) -> None:
+    """
+    Weighted reliability curve: bin predictions by quantile, compare mean
+    predicted vs mean actual within each bin.
+    """
+    df = pd.DataFrame({"y": y_true, "p": y_pred, "w": weight})
+    df["bin"] = pd.qcut(df["p"], q=bins, duplicates="drop")
+    grp = df.groupby("bin", observed=True).apply(
+        lambda g: pd.Series(
+            {
+                "pred_mean": np.average(g["p"], weights=g["w"]),
+                "true_mean": np.average(g["y"], weights=g["w"]),
+                "total_w": g["w"].sum(),
+            }
+        ),
+        include_groups=False,
+    )
+
+    fig, ax = plt.subplots(figsize=(6, 6))
+    ax.plot([0, 1], [0, 1], "k--", alpha=0.5, label="perfect")
+    ax.scatter(grp["pred_mean"], grp["true_mean"],
+               s=np.sqrt(grp["total_w"]) * 0.5, alpha=0.7)
+    ax.set_xlabel("predicted organic_share (bin mean)")
+    ax.set_ylabel("actual organic_share (bin mean, weighted)")
+    ax.set_title("Calibration — test")
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.legend()
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.tight_layout()
+    fig.savefig(save_path, dpi=120)
+    plt.close(fig)
+
+
+def coefficient_plot(coef_df: pd.DataFrame, save_path: Path) -> None:
+    df = coef_df.sort_values("coef")
+    fig, ax = plt.subplots(figsize=(8, max(4, 0.3 * len(df))))
+    colors = ["#d62728" if c < 0 else "#2ca02c" for c in df["coef"]]
+    ax.barh(df["feature"], df["coef"], color=colors)
+    ax.axvline(0, color="k", lw=0.5)
+    ax.set_title("Baseline Ridge coefficients (standardized features)")
+    ax.set_xlabel("coefficient")
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.tight_layout()
+    fig.savefig(save_path, dpi=120)
+    plt.close(fig)
+
+
+def main() -> None:
+    cfg = load_config()
+
+    target = str(cfg.modeling.target)
+    weight = str(cfg.modeling.weight)
+    features = list(cfg.modeling.features)
+
+    out_cfg = cfg.datasets.targets
+    train_path = Path(out_cfg.train_dir) / out_cfg.train_clean_filename
+    test_path = Path(out_cfg.test_dir) / out_cfg.test_clean_filename
+    print(f"Loading train: {train_path}")
+    print(f"Loading test:  {test_path}")
+
+    train = pl.read_parquet(train_path).to_pandas()
+    test = pl.read_parquet(test_path).to_pandas()
+    print(f"train: {train.shape}, test: {test.shape}")
+
+    # Drop install_date from feature input — it's an identifier, not a feature
+    print(f"\nFitting Ridge on {len(features)} numeric features + country_te + platform OHE")
+    art = fit_baseline(train, target=target, weight=weight, features=features, alpha=1.0)
+
+    pred_train = predict_baseline(art, train)
+    pred_test = predict_baseline(art, test)
+
+    print("\n--- Metrics ---")
+    report(train[target].to_numpy(), pred_train, train[weight].to_numpy(dtype=float), label="train")
+    report(test[target].to_numpy(), pred_test, test[weight].to_numpy(dtype=float), label="test")
+
+    print("\n--- Top-20 coefficients (|coef|) ---")
+    coef_top = coefficient_importance(art, top=20)
+    print(coef_top.to_string(index=False))
+
+    # ----- Save predictions -----
+    pred_dir = Path("data/predictions")
+    pred_dir.mkdir(parents=True, exist_ok=True)
+
+    for df, pred, name in [
+        (train, pred_train, "baseline_train.parquet"),
+        (test, pred_test, "baseline_test.parquet"),
+    ]:
+        out = df[["platform", "country_code", "install_date", target, weight]].copy()
+        out["pred"] = pred
+        out["abs_err"] = np.abs(out[target] - out["pred"])
+        out_path = pred_dir / name
+        pl.from_pandas(out).write_parquet(out_path, compression="zstd")
+        print(f"Saved predictions: {out_path}")
+
+    # ----- Plots -----
+    plot_dir = Path("data/plots")
+    calibration_plot(
+        test[target].to_numpy(),
+        pred_test,
+        test[weight].to_numpy(dtype=float),
+        plot_dir / "baseline_calibration.png",
+    )
+    coefficient_plot(coef_top, plot_dir / "baseline_coefficients.png")
+    print(f"Saved plots:        {plot_dir}/baseline_calibration.png, baseline_coefficients.png")
+
+
+if __name__ == "__main__":
+    main()
