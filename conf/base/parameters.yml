@@ -23,6 +23,78 @@ cleaning:
   min_total_installs: 30   # drop cohorts smaller than this (target = noisy Bernoulli)
 
 # =========================
+# MODELING — column whitelist for the cleaned tables
+# =========================
+# After cleaning, `_clean.parquet` keeps only:
+#   modeling.keep_keys + modeling.weight + modeling.target + modeling.features
+# Everything else is dropped. Edit `features` to prune multicollinear / buggy
+# columns before baseline.
+
+modeling:
+  target: organic_share
+  weight: total_installs
+  keep_keys:
+    - platform
+    - country_code
+    - install_date
+
+  features:
+    # ---- paid volume (one representative; others are collinear at 0.95+) ----
+    - log1p_ads_cum_learn
+    - installs_spend
+
+    # ---- paid ratios (already normalized) ----
+    - cpi
+    - ctr
+    - cvr
+    - cpm
+    - ads_avg_check_learn
+    - ads_days_with_purchase_learn
+    - ads_purchase_count_learn
+
+    # ---- IAP volume / dynamics ----
+    - log1p_iap_cum_learn
+    - iap_days_with_purchase_learn
+    - iap_purchase_count_learn
+    - iap_avg_check_learn
+    - rev_d1_iap
+    - rev_d3_iap
+    - d1_share_iap
+    - has_second_iap
+    - time_to_first_iap_minutes
+    - time_first_and_second_iap_minutes
+    # excluded for now (extreme outliers / sparse): acceleration_iap,
+    # time_between_iap_2_3, avg_check_d1_3_iap, avg_check_d4_7_iap
+
+    # ---- sessions ----
+    - n_sessions_total
+    - active_days_7d
+    - weekend_sessions
+    - sessions_d1
+    - session_velocity_slope
+    - last_active_day
+    - lag_first_session
+    - lag_last_session
+    - session_span_days
+    - density_1d
+    - density_3d
+    - density_7d
+    - avg_gap_day7
+    - med_gap_day7
+    - max_gap_day7
+    # excluded (buggy values): zero_session_days
+
+    # ---- retention curve (day 1..7) ----
+    - ret_1
+    - ret_2
+    - ret_3
+    - ret_4
+    - ret_5
+    - ret_6
+    - ret_7
+    # ret_0 is constant ≈ 1, dropped
+
+# =========================
 # SPLIT DATA PARAMETERS
 # =========================
 
