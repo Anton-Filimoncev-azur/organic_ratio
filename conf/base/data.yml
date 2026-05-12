@@ -53,3 +53,8 @@ datasets:
     type: parquet
     local_feature_dir: ${paths.features}/cohort
     filename: cohort_level.parquet
+
+  targets:
+    type: parquet
+    local_feature_dir: ${paths.features}/targets
+    filename: targets.parquet
