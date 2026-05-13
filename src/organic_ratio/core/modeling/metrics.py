@@ -58,6 +58,40 @@ def percentage_error(y_true, y_pred, eps: float = 1e-6) -> np.ndarray:
     return out
 
 
+DEFAULT_PE_BUCKETS = [-1.00, -0.50, -0.25, -0.10, 0.0, 0.10, 0.25, 0.50, 1.00]
+
+
+def pe_buckets(pe: np.ndarray, edges=DEFAULT_PE_BUCKETS) -> list[dict]:
+    """
+    Histogram of PE binned with explicit edges (default: ±10/25/50/100%).
+
+    Includes two open tails:
+        (-inf, edges[0])   and   (edges[-1], +inf)
+
+    Returns list of dicts: [{lo, hi, count, pct}, ...] (NaN PEs dropped).
+    """
+    pe = np.asarray(pe, dtype=float)
+    pe = pe[~np.isnan(pe)]
+    n = pe.size
+
+    full_edges = [-np.inf, *edges, np.inf]
+    rows = []
+    for lo, hi in zip(full_edges[:-1], full_edges[1:]):
+        # left-open right-closed, except the very last is right-open to +inf
+        if np.isinf(hi):
+            mask = pe > lo
+        else:
+            mask = (pe > lo) & (pe <= hi)
+        count = int(mask.sum())
+        rows.append({
+            "lo": lo,
+            "hi": hi,
+            "count": count,
+            "pct": float(count / n) if n else 0.0,
+        })
+    return rows
+
+
 def pe_summary(pe: np.ndarray) -> dict:
     """Compact summary of a percentage-error array (NaNs dropped)."""
     pe = np.asarray(pe, dtype=float)

@@ -42,7 +42,12 @@ from organic_ratio.core.modeling.baseline import (
     predict_baseline,
     coefficient_importance,
 )
-from organic_ratio.core.modeling.metrics import report, percentage_error, pe_summary
+from organic_ratio.core.modeling.metrics import (
+    report,
+    percentage_error,
+    pe_summary,
+    pe_buckets,
+)
 
 
 def calibration_plot(y_true, y_pred, weight, save_path: Path, bins: int = 20) -> None:
@@ -101,6 +106,21 @@ def pe_distribution_plot(pe: np.ndarray, save_path: Path, clip: float = 2.0) -> 
     fig.tight_layout()
     fig.savefig(save_path, dpi=120)
     plt.close(fig)
+
+
+def print_pe_buckets(buckets: list[dict], label: str = "") -> None:
+    total = sum(b["count"] for b in buckets)
+    print(f"\n--- PE buckets ({label}, n={total:,}) ---")
+    print(f"  {'bucket':>18s}  {'count':>8s}   {'pct':>6s}")
+    for b in buckets:
+        lo, hi = b["lo"], b["hi"]
+        if np.isinf(lo):
+            label_str = f"  ≤ {int(hi*100):>+4d}%"
+        elif np.isinf(hi):
+            label_str = f"  > {int(lo*100):>+4d}%"
+        else:
+            label_str = f"{int(lo*100):>+4d}% .. {int(hi*100):>+4d}%"
+        print(f"  {label_str:>18s}  {b['count']:>8,}   {b['pct']*100:>5.1f}%")
 
 
 def print_pe_summary(summary: dict, label: str = "") -> None:
@@ -162,6 +182,8 @@ def main() -> None:
     pe_test = percentage_error(test[target].to_numpy(), pred_test)
     print_pe_summary(pe_summary(pe_train), label="train")
     print_pe_summary(pe_summary(pe_test), label="test")
+    print_pe_buckets(pe_buckets(pe_train), label="train")
+    print_pe_buckets(pe_buckets(pe_test), label="test")
 
     print("\n--- Top-20 coefficients (|coef|) ---")
     coef_top = coefficient_importance(art, top=20)
