@@ -9,6 +9,9 @@ tabulate>=0.9.0
 scikit-learn>=1.4
 matplotlib>=3.7
 seaborn>=0.13
+pymc>=5.10
+arviz>=0.17
+# optional fast NUTS backend: numpyro, jax (install separately if нужен)
 ipython>=8.10
 jupyterlab>=3.0
 notebook

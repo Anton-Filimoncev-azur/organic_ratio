@@ -38,6 +38,16 @@ modeling:
     - country_code
     - install_date
 
+  ridge_alpha: 1.0
+
+  pymc:
+    draws: 500
+    tune: 500
+    chains: 2
+    target_accept: 0.9
+    nuts_sampler: pymc          # pymc | numpyro | nutpie
+    random_seed: 42
+
   features:
     # ---- paid volume (one representative; others are collinear at 0.95+) ----
     - log1p_ads_cum_learn
