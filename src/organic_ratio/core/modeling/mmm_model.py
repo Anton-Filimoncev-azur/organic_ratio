@@ -1,21 +1,17 @@
 """
-Halo MMM via pymc-marketing.
+Halo MMM via pymc-marketing's multidimensional MMM
+(`pymc_marketing.mmm.multidimensional.MMM`).
 
-Target = organic_installs at (platform × country × install_date)
-Channels = top-N paid media_source spends (+ other_paid bucket)
-Model learns: how much extra organic each $ of paid spend brings
-              (after adstock × saturation transformation).
-
-Per-geo random effects via `dims=("geo",)`.
+Target = organic_installs at (platform × country × install_date).
+Channels = top-N paid media_source spends (+ other_paid bucket).
+Per-geo hierarchical priors via dims=("geo",).
 """
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
-import pandas as pd
-
+from pymc_marketing.mmm.multidimensional import MMM
 from pymc_marketing.mmm import (
-    MMM,
     GeometricAdstock,
     LogisticSaturation,
     MichaelisMentenSaturation,
@@ -43,22 +39,25 @@ def build_mmm(
     channel_columns: List[str],
     adstock_l_max: int,
     saturation_kind: str,
-    yearly_seasonality: int,
+    dims: Optional[Tuple[str, ...]] = ("geo",),
+    yearly_seasonality: int = 0,
     control_columns: Optional[List[str]] = None,
     date_column: str = "install_date",
+    target_column: str = "organic_installs",
 ) -> MMM:
     """
-    Construct a pymc-marketing MMM (single time-series).
+    Multidimensional MMM with optional hierarchical dim (geo).
 
-    pymc-marketing 0.10's MMM class expects one row per date. For multi-geo
-    panels, aggregate first or loop per geo externally.
+    dims=("geo",)  → per-geo channel coefficients (partial pooling across geos)
+    dims=None      → single time-series (must have one row per date)
     """
-    mmm = MMM(
+    return MMM(
         date_column=date_column,
         channel_columns=channel_columns,
+        target_column=target_column,
         control_columns=control_columns,
         adstock=GeometricAdstock(l_max=adstock_l_max),
         saturation=make_saturation(saturation_kind),
         yearly_seasonality=yearly_seasonality if yearly_seasonality > 0 else None,
+        dims=dims,
     )
-    return mmm

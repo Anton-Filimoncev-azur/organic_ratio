@@ -106,7 +106,9 @@ def add_seasonality(panel: pl.DataFrame) -> pl.DataFrame:
     # polars weekday: 1=Mon..7=Sun in v1+; normalize to 0..6
     panel = panel.with_columns((pl.col("_dow") - 1).alias("_dow"))
     for d in range(7):
-        panel = panel.with_columns((pl.col("_dow") == d).cast(pl.Int8).alias(f"dow_{d}"))
+        # Float64 dow dummies — avoids strict-dtype mismatch when pandas
+        # round-trips through fit/predict in pymc-marketing.
+        panel = panel.with_columns((pl.col("_dow") == d).cast(pl.Float64).alias(f"dow_{d}"))
     return panel.drop("_dow")
 
 

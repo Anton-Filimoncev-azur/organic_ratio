@@ -75,35 +75,28 @@ def main() -> None:
     print(f"Channels ({len(channel_cols)}): {channel_cols}")
     print(f"Controls ({len(control_cols)}): {control_cols}")
 
-    # pymc-marketing MMM expects one row per date. Collapse geo dim by summing
-    # installs / spend across all geos. dow_* are identical across geos for the
-    # same date → take max (idempotent).
-    print(f"\nAggregating panel: {panel.shape[0]} rows → 1 row per date")
-    agg = {target: "sum", "total_installs": "sum"}
-    agg.update({c: "sum" for c in channel_cols})
-    agg.update({c: "max" for c in control_cols})
-    panel_ts = (
-        panel.groupby("install_date", as_index=False)
-        .agg(agg)
-        .sort_values("install_date")
-        .reset_index(drop=True)
-    )
-    print(f"Time-series: {panel_ts.shape[0]} days "
-          f"({panel_ts['install_date'].min().date()} → "
-          f"{panel_ts['install_date'].max().date()})")
+    # Multidim MMM: long-format panel with date + geo + channels + controls.
+    geo_dim = bool(mmm_cfg.geo_dim)
+    dims = ("geo",) if geo_dim else None
 
-    keep = ["install_date"] + channel_cols + control_cols
-    X = panel_ts[keep]
-    y = panel_ts[target].astype(float)
+    keep = ["install_date"] + (["geo"] if geo_dim else []) + channel_cols + control_cols
+    X = panel[keep].reset_index(drop=True)
+    y = panel[target].astype(float).reset_index(drop=True)
+
+    if geo_dim:
+        print(f"Per-geo MMM: {panel['geo'].nunique()} geos × "
+              f"{panel['install_date'].nunique()} dates")
 
     # ----- Build model -----
     mmm = build_mmm(
         channel_columns=channel_cols,
         adstock_l_max=int(mmm_cfg.adstock_l_max),
         saturation_kind=str(mmm_cfg.saturation),
+        dims=dims,
         yearly_seasonality=int(mmm_cfg.yearly_seasonality),
         control_columns=control_cols if control_cols else None,
         date_column="install_date",
+        target_column=target,
     )
 
     # ----- Fit -----
@@ -138,7 +131,9 @@ def main() -> None:
     # ----- In-sample predictions -----
     print("\nComputing posterior predictive (in-sample)...")
     y_pred = mmm.predict(X)
-    pred_df = panel_ts[["install_date", target]].copy()
+    id_cols = ["install_date"] + (["geo", "platform", "country_code"] if geo_dim else [])
+    id_cols = [c for c in id_cols if c in panel.columns]
+    pred_df = panel[id_cols + [target]].reset_index(drop=True).copy()
     pred_df["pred"] = np.asarray(y_pred)
     pred_df["abs_err"] = (pred_df[target] - pred_df["pred"]).abs()
 
