@@ -45,7 +45,8 @@ modeling:
     tune: 500
     chains: 2
     target_accept: 0.9
-    nuts_sampler: pymc          # pymc | numpyro | nutpie
+    nuts_sampler: numpyro       # pymc | numpyro | nutpie
+    chain_method: parallel      # numpyro only: parallel | sequential | vectorized
     random_seed: 42
 
   features:

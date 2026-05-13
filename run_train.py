@@ -47,6 +47,7 @@ from organic_ratio.core.modeling.pymc_model import (
     predict_mean,
     beta_summary,
     sampler_diagnostics,
+    report_jax_devices,
 )
 from organic_ratio.core.modeling.metrics import (
     report,
@@ -134,7 +135,11 @@ def main() -> None:
     chains = int(pymc_cfg.chains)
     target_accept = float(pymc_cfg.target_accept)
     nuts_sampler = str(pymc_cfg.nuts_sampler)
+    chain_method = str(pymc_cfg.get("chain_method", "parallel"))
     random_seed = int(pymc_cfg.random_seed)
+
+    if nuts_sampler == "numpyro":
+        report_jax_devices()
 
     out_cfg = cfg.datasets.targets
     train_path = Path(out_cfg.train_dir) / out_cfg.train_clean_filename
@@ -174,12 +179,14 @@ def main() -> None:
 
     # ---------- Sampling ----------
     print(f"Sampling: draws={draws}, tune={tune}, chains={chains}, "
-          f"target_accept={target_accept}, sampler={nuts_sampler}")
+          f"target_accept={target_accept}, sampler={nuts_sampler}"
+          + (f", chain_method={chain_method}" if nuts_sampler == "numpyro" else ""))
     trace = sample(
         model,
         draws=draws, tune=tune, chains=chains,
         target_accept=target_accept,
         nuts_sampler=nuts_sampler,
+        chain_method=chain_method,
         random_seed=random_seed,
     )
 

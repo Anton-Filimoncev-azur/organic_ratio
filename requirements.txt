@@ -11,7 +11,11 @@ matplotlib>=3.7
 seaborn>=0.13
 pymc>=5.10
 arviz>=0.17
-# optional fast NUTS backend: numpyro, jax (install separately if нужен)
+# Fast NUTS backend (default in parameters.yml). JAX-based.
+numpyro>=0.13
+jax>=0.4
+jaxlib>=0.4
+# GPU build of JAX is installed separately — see README/run_train.py header
 ipython>=8.10
 jupyterlab>=3.0
 notebook

@@ -78,7 +78,21 @@ def sample(
     target_accept: float,
     nuts_sampler: str,
     random_seed: int,
+    chain_method: str = "parallel",
 ) -> az.InferenceData:
+    """
+    Run NUTS via the selected backend.
+
+    nuts_sampler:
+      * "pymc"     — default PyTensor/C backend (slow, no extra deps)
+      * "numpyro"  — JAX-backed NUTS (fast; needs `numpyro`, `jax`).
+                     chain_method = parallel | sequential | vectorized
+      * "nutpie"   — Rust-backed NUTS (fast; needs `nutpie`)
+    """
+    sampler_kwargs = {}
+    if nuts_sampler == "numpyro":
+        sampler_kwargs["chain_method"] = chain_method
+
     with model:
         trace = pm.sample(
             draws=draws,
@@ -86,10 +100,22 @@ def sample(
             chains=chains,
             target_accept=target_accept,
             nuts_sampler=nuts_sampler,
+            nuts_sampler_kwargs=sampler_kwargs or None,
             random_seed=random_seed,
             progressbar=True,
         )
     return trace
+
+
+def report_jax_devices() -> None:
+    """Print JAX devices visible to numpyro (GPU/CPU). No-op if JAX missing."""
+    try:
+        import jax
+    except ImportError:
+        print("[jax] not installed — skipping device report")
+        return
+    print(f"[jax] default_backend: {jax.default_backend()}")
+    print(f"[jax] devices: {jax.devices()}")
 
 
 def posterior_mean_params(trace: az.InferenceData) -> dict:
