@@ -11,6 +11,7 @@ matplotlib>=3.7
 seaborn>=0.13
 pymc>=5.10
 arviz>=0.17
+pymc-marketing>=0.10
 # Fast NUTS backend (default in parameters.yml). JAX-based.
 numpyro>=0.13
 jax>=0.4

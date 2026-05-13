@@ -32,6 +32,7 @@ def build_model(
     n_countries: int,
     n_platforms: int,
     feature_names: List[str],
+    beta_prior_sigma: float = 1.0,
 ) -> pm.Model:
     coords = {
         "feature": feature_names,
@@ -42,7 +43,7 @@ def build_model(
 
     with pm.Model(coords=coords) as model:
         alpha = pm.Normal("alpha", mu=0.0, sigma=1.5)
-        beta = pm.Normal("beta", mu=0.0, sigma=0.5, dims="feature")
+        beta = pm.Normal("beta", mu=0.0, sigma=beta_prior_sigma, dims="feature")
 
         # Non-centered country effects (decouples u_country from sigma_country
         # to avoid the classic hierarchical funnel; lets NUTS use larger steps).

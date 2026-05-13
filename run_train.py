@@ -146,6 +146,7 @@ def main() -> None:
     target_accept = float(pymc_cfg.target_accept)
     nuts_sampler = str(pymc_cfg.nuts_sampler)
     chain_method = str(pymc_cfg.get("chain_method", "parallel"))
+    beta_prior_sigma = float(pymc_cfg.get("beta_prior_sigma", 1.0))
     random_seed = int(pymc_cfg.random_seed)
 
     if nuts_sampler == "numpyro":
@@ -184,6 +185,7 @@ def main() -> None:
         n_countries=len(prep.country_categories),
         n_platforms=len(prep.platform_categories),
         feature_names=prep.feature_names,
+        beta_prior_sigma=beta_prior_sigma,
     )
     print(f"\nModel built on {X_train.shape[0]} obs × {X_train.shape[1]} features")
 

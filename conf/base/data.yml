@@ -54,6 +54,11 @@ datasets:
     local_feature_dir: ${paths.features}/cohort
     filename: cohort_level.parquet
 
+  mmm_panel:
+    type: parquet
+    local_feature_dir: ${paths.features}/mmm
+    filename: mmm_panel.parquet
+
   targets:
     type: parquet
     local_feature_dir: ${paths.features}/targets
