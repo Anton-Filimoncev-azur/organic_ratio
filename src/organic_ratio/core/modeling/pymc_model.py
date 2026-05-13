@@ -44,11 +44,19 @@ def build_model(
         alpha = pm.Normal("alpha", mu=0.0, sigma=1.5)
         beta = pm.Normal("beta", mu=0.0, sigma=0.5, dims="feature")
 
+        # Non-centered country effects (decouples u_country from sigma_country
+        # to avoid the classic hierarchical funnel; lets NUTS use larger steps).
         sigma_country = pm.HalfNormal("sigma_country", sigma=1.0)
-        u_country = pm.Normal("u_country", mu=0.0, sigma=sigma_country, dims="country")
+        u_country_raw = pm.Normal("u_country_raw", mu=0.0, sigma=1.0, dims="country")
+        u_country = pm.Deterministic(
+            "u_country", u_country_raw * sigma_country, dims="country"
+        )
 
         sigma_platform = pm.HalfNormal("sigma_platform", sigma=1.0)
-        u_platform = pm.Normal("u_platform", mu=0.0, sigma=sigma_platform, dims="platform")
+        u_platform_raw = pm.Normal("u_platform_raw", mu=0.0, sigma=1.0, dims="platform")
+        u_platform = pm.Deterministic(
+            "u_platform", u_platform_raw * sigma_platform, dims="platform"
+        )
 
         eta = (
             alpha

@@ -16,6 +16,16 @@ Run from project root:
 from dotenv import load_dotenv
 load_dotenv()
 
+import os
+
+# CPU-only fallback: uncomment to force multiple host CPU devices so
+# `chain_method: parallel` works on a CPU-only machine. Not needed on GPU
+# (use `chain_method: vectorized` in parameters.yml instead).
+# os.environ.setdefault(
+#     "XLA_FLAGS",
+#     "--xla_force_host_platform_device_count=4",
+# )
+
 import sys
 import pickle
 from pathlib import Path
