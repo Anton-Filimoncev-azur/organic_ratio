@@ -28,18 +28,70 @@ def weighted_r2(y_true, y_pred, w) -> float:
     return 1.0 - ss_res / ss_tot
 
 
+def weighted_wmape(y_true, y_pred, w) -> float:
+    """
+    Weighted MAPE-style metric, in [0, ∞):
+        WMAPE = Σ wᵢ·|yᵢ − ŷᵢ| / Σ wᵢ·|yᵢ|
+    For organic_share ∈ [0, 1] reads as: total weighted absolute error per
+    unit of actual organic mass. Robust to per-row y=0 cohorts.
+    """
+    y_true = np.asarray(y_true)
+    y_pred = np.asarray(y_pred)
+    w = np.asarray(w, dtype=float)
+    num = float(np.sum(w * np.abs(y_true - y_pred)))
+    den = float(np.sum(w * np.abs(y_true)))
+    if den == 0:
+        return float("nan")
+    return num / den
+
+
+def percentage_error(y_true, y_pred, eps: float = 1e-6) -> np.ndarray:
+    """
+    Per-row PE = (ŷ - y) / y. y=0 rows return NaN.
+    Sign convention: positive PE → over-prediction.
+    """
+    y_true = np.asarray(y_true, dtype=float)
+    y_pred = np.asarray(y_pred, dtype=float)
+    out = np.full_like(y_true, np.nan, dtype=float)
+    mask = np.abs(y_true) > eps
+    out[mask] = (y_pred[mask] - y_true[mask]) / y_true[mask]
+    return out
+
+
+def pe_summary(pe: np.ndarray) -> dict:
+    """Compact summary of a percentage-error array (NaNs dropped)."""
+    pe = np.asarray(pe, dtype=float)
+    pe = pe[~np.isnan(pe)]
+    if pe.size == 0:
+        return {"n": 0}
+    return {
+        "n": int(pe.size),
+        "mean": float(np.mean(pe)),
+        "median": float(np.median(pe)),
+        "q05": float(np.quantile(pe, 0.05)),
+        "q25": float(np.quantile(pe, 0.25)),
+        "q75": float(np.quantile(pe, 0.75)),
+        "q95": float(np.quantile(pe, 0.95)),
+        "within_10pct": float(np.mean(np.abs(pe) <= 0.10)),
+        "within_20pct": float(np.mean(np.abs(pe) <= 0.20)),
+        "within_50pct": float(np.mean(np.abs(pe) <= 0.50)),
+    }
+
+
 def report(y_true, y_pred, w, label: str = "") -> dict:
     out = {
         "rmse_w": weighted_rmse(y_true, y_pred, w),
         "mae_w": weighted_mae(y_true, y_pred, w),
         "r2_w": weighted_r2(y_true, y_pred, w),
+        "wmape": weighted_wmape(y_true, y_pred, w),
         "rmse_u": float(np.sqrt(np.mean((np.asarray(y_true) - np.asarray(y_pred)) ** 2))),
         "mae_u": float(np.mean(np.abs(np.asarray(y_true) - np.asarray(y_pred)))),
     }
     if label:
         print(
             f"{label:>6}: "
-            f"RMSE_w={out['rmse_w']:.4f}  MAE_w={out['mae_w']:.4f}  R²_w={out['r2_w']:.4f}  "
+            f"RMSE_w={out['rmse_w']:.4f}  MAE_w={out['mae_w']:.4f}  "
+            f"R²_w={out['r2_w']:.4f}  WMAPE={out['wmape']*100:.2f}%  "
             f"| RMSE_u={out['rmse_u']:.4f}  MAE_u={out['mae_u']:.4f}"
         )
     return out

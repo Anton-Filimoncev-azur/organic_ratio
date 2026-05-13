@@ -42,7 +42,7 @@ from organic_ratio.core.modeling.baseline import (
     predict_baseline,
     coefficient_importance,
 )
-from organic_ratio.core.modeling.metrics import report
+from organic_ratio.core.modeling.metrics import report, percentage_error, pe_summary
 
 
 def calibration_plot(y_true, y_pred, weight, save_path: Path, bins: int = 20) -> None:
@@ -77,6 +77,43 @@ def calibration_plot(y_true, y_pred, weight, save_path: Path, bins: int = 20) ->
     fig.tight_layout()
     fig.savefig(save_path, dpi=120)
     plt.close(fig)
+
+
+def pe_distribution_plot(pe: np.ndarray, save_path: Path, clip: float = 2.0) -> None:
+    """
+    Histogram of percentage error (clipped to ±clip for visibility).
+    """
+    pe = pe[~np.isnan(pe)]
+    pe_clipped = np.clip(pe, -clip, clip)
+
+    fig, ax = plt.subplots(figsize=(9, 4))
+    ax.hist(pe_clipped * 100, bins=80, edgecolor="black")
+    ax.axvline(0, color="k", ls="--", alpha=0.5)
+    ax.axvline(np.median(pe) * 100, color="r", ls="--",
+               label=f"median = {np.median(pe) * 100:+.1f}%")
+    ax.axvline(np.mean(pe) * 100, color="orange", ls="--",
+               label=f"mean = {np.mean(pe) * 100:+.1f}%")
+    ax.set_xlabel("PE (%)")
+    ax.set_ylabel("count")
+    ax.set_title(f"Percentage error — test  (n={len(pe):,}, clipped to ±{int(clip * 100)}%)")
+    ax.legend()
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.tight_layout()
+    fig.savefig(save_path, dpi=120)
+    plt.close(fig)
+
+
+def print_pe_summary(summary: dict, label: str = "") -> None:
+    print(f"\n--- PE distribution ({label}, n={summary['n']:,} non-zero targets) ---")
+    print(f"  mean    : {summary['mean'] * 100:+.1f}%")
+    print(f"  median  : {summary['median'] * 100:+.1f}%")
+    print(f"  Q05     : {summary['q05'] * 100:+.1f}%")
+    print(f"  Q25     : {summary['q25'] * 100:+.1f}%")
+    print(f"  Q75     : {summary['q75'] * 100:+.1f}%")
+    print(f"  Q95     : {summary['q95'] * 100:+.1f}%")
+    print(f"  within ±10%: {summary['within_10pct'] * 100:5.1f}%")
+    print(f"  within ±20%: {summary['within_20pct'] * 100:5.1f}%")
+    print(f"  within ±50%: {summary['within_50pct'] * 100:5.1f}%")
 
 
 def coefficient_plot(coef_df: pd.DataFrame, save_path: Path) -> None:
@@ -121,6 +158,11 @@ def main() -> None:
     report(train[target].to_numpy(), pred_train, train[weight].to_numpy(dtype=float), label="train")
     report(test[target].to_numpy(), pred_test, test[weight].to_numpy(dtype=float), label="test")
 
+    pe_train = percentage_error(train[target].to_numpy(), pred_train)
+    pe_test = percentage_error(test[target].to_numpy(), pred_test)
+    print_pe_summary(pe_summary(pe_train), label="train")
+    print_pe_summary(pe_summary(pe_test), label="test")
+
     print("\n--- Top-20 coefficients (|coef|) ---")
     coef_top = coefficient_importance(art, top=20)
     print(coef_top.to_string(index=False))
@@ -149,7 +191,19 @@ def main() -> None:
         plot_dir / "baseline_calibration.png",
     )
     coefficient_plot(coef_top, plot_dir / "baseline_coefficients.png")
-    print(f"Saved plots:        {plot_dir}/baseline_calibration.png, baseline_coefficients.png")
+    pe_distribution_plot(pe_test, plot_dir / "baseline_pe_distribution.png")
+    print(
+        f"Saved plots:        {plot_dir}/baseline_calibration.png, "
+        f"baseline_coefficients.png, baseline_pe_distribution.png"
+    )
+
+    # save PE per-row for further inspection
+    pred_dir = Path("data/predictions")
+    pe_df = test[["platform", "country_code", "install_date", target, weight]].copy()
+    pe_df["pred"] = pred_test
+    pe_df["pe"] = pe_test
+    pl.from_pandas(pe_df).write_parquet(pred_dir / "baseline_pe_test.parquet", compression="zstd")
+    print(f"Saved PE table:     {pred_dir}/baseline_pe_test.parquet")
 
 
 if __name__ == "__main__":
