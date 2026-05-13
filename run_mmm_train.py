@@ -75,17 +75,32 @@ def main() -> None:
     print(f"Channels ({len(channel_cols)}): {channel_cols}")
     print(f"Controls ({len(control_cols)}): {control_cols}")
 
-    # X / y for pymc-marketing
-    keep = ["install_date", "geo"] + channel_cols + control_cols
-    X = panel[keep].reset_index(drop=True)
-    y = panel[target].astype(float).reset_index(drop=True)
+    # pymc-marketing MMM expects one row per date. Collapse geo dim by summing
+    # installs / spend across all geos. dow_* are identical across geos for the
+    # same date → take max (idempotent).
+    print(f"\nAggregating panel: {panel.shape[0]} rows → 1 row per date")
+    agg = {target: "sum", "total_installs": "sum"}
+    agg.update({c: "sum" for c in channel_cols})
+    agg.update({c: "max" for c in control_cols})
+    panel_ts = (
+        panel.groupby("install_date", as_index=False)
+        .agg(agg)
+        .sort_values("install_date")
+        .reset_index(drop=True)
+    )
+    print(f"Time-series: {panel_ts.shape[0]} days "
+          f"({panel_ts['install_date'].min().date()} → "
+          f"{panel_ts['install_date'].max().date()})")
+
+    keep = ["install_date"] + channel_cols + control_cols
+    X = panel_ts[keep]
+    y = panel_ts[target].astype(float)
 
     # ----- Build model -----
     mmm = build_mmm(
         channel_columns=channel_cols,
         adstock_l_max=int(mmm_cfg.adstock_l_max),
         saturation_kind=str(mmm_cfg.saturation),
-        geo_dim=bool(mmm_cfg.geo_dim),
         yearly_seasonality=int(mmm_cfg.yearly_seasonality),
         control_columns=control_cols if control_cols else None,
         date_column="install_date",
@@ -123,7 +138,7 @@ def main() -> None:
     # ----- In-sample predictions -----
     print("\nComputing posterior predictive (in-sample)...")
     y_pred = mmm.predict(X)
-    pred_df = panel[["platform", "country_code", "install_date", "geo", target]].copy()
+    pred_df = panel_ts[["install_date", target]].copy()
     pred_df["pred"] = np.asarray(y_pred)
     pred_df["abs_err"] = (pred_df[target] - pred_df["pred"]).abs()
 
