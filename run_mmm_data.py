@@ -32,10 +32,12 @@ def main() -> None:
     installs_cfg = cfg.datasets.installs
     costs_cfg = cfg.datasets.costs
 
+    # installs feature parquet keeps cohort keys (platform, country, source).
+    # costs feature parquet drops them (user-level after join); use RAW costs.
     installs_path = Path(installs_cfg.local_feature_dir) / installs_cfg.filename
-    costs_path = Path(costs_cfg.local_feature_dir) / costs_cfg.filename
-    print(f"Reading installs: {installs_path}")
-    print(f"Reading costs:    {costs_path}")
+    costs_path = Path(costs_cfg.local_raw_dir) / costs_cfg.filename
+    print(f"Reading installs (features): {installs_path}")
+    print(f"Reading costs (raw):         {costs_path}")
 
     panel, top_channels = build_mmm_panel(
         installs_path=installs_path,
