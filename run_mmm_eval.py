@@ -56,8 +56,11 @@ def _print_pe_summary(s, label):
 
 
 def _print_pe_buckets(buckets, label):
-    total = sum(b["count"] for b in buckets)
-    print(f"\n--- PE buckets ({label}, n={total:,}) ---")
+    total_w = sum(b["weight"] for b in buckets)
+    total_n = sum(b["count"] for b in buckets)
+    print(f"\n--- PE buckets ({label}, weighted by total_installs, "
+          f"total_w={total_w:,.0f}, cohorts={total_n:,}) ---")
+    print(f"  {'bucket':>18s}  {'installs':>12s}   {'pct':>6s}   {'cohorts':>8s}")
     for b in buckets:
         lo, hi = b["lo"], b["hi"]
         if np.isinf(lo):
@@ -66,7 +69,8 @@ def _print_pe_buckets(buckets, label):
             l = f"  > {int(lo*100):>+4d}%"
         else:
             l = f"{int(lo*100):>+4d}% .. {int(hi*100):>+4d}%"
-        print(f"  {l:>18s}  {b['count']:>8,}   {b['pct']*100:>5.1f}%")
+        print(f"  {l:>18s}  {b['weight']:>12,.0f}   "
+              f"{b['pct']*100:>5.1f}%   {b['count']:>8,}")
 
 
 def pred_vs_actual_plot(df: pd.DataFrame, save_path: Path) -> None:
@@ -138,7 +142,7 @@ def main() -> None:
 
     pe = percentage_error(y_true, y_p)
     _print_pe_summary(pe_summary(pe), label="test")
-    _print_pe_buckets(pe_buckets(pe), label="test")
+    _print_pe_buckets(pe_buckets(pe, w), label="test")
 
     # ----- Save predictions + plot -----
     pred_dir = Path("data/predictions")

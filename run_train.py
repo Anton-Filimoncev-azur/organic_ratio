@@ -68,9 +68,11 @@ from organic_ratio.core.modeling.metrics import (
 
 
 def _print_pe_buckets(buckets, label):
-    total = sum(b["count"] for b in buckets)
-    print(f"\n--- PE buckets ({label}, n={total:,}) ---")
-    print(f"  {'bucket':>18s}  {'count':>8s}   {'pct':>6s}")
+    total_w = sum(b["weight"] for b in buckets)
+    total_n = sum(b["count"] for b in buckets)
+    print(f"\n--- PE buckets ({label}, weighted by total_installs, "
+          f"total_w={total_w:,.0f}, cohorts={total_n:,}) ---")
+    print(f"  {'bucket':>18s}  {'installs':>12s}   {'pct':>6s}   {'cohorts':>8s}")
     for b in buckets:
         lo, hi = b["lo"], b["hi"]
         if np.isinf(lo):
@@ -79,7 +81,8 @@ def _print_pe_buckets(buckets, label):
             label_str = f"  > {int(lo*100):>+4d}%"
         else:
             label_str = f"{int(lo*100):>+4d}% .. {int(hi*100):>+4d}%"
-        print(f"  {label_str:>18s}  {b['count']:>8,}   {b['pct']*100:>5.1f}%")
+        print(f"  {label_str:>18s}  {b['weight']:>12,.0f}   "
+              f"{b['pct']*100:>5.1f}%   {b['count']:>8,}")
 
 
 def _print_pe_summary(summary, label):
@@ -231,8 +234,14 @@ def main() -> None:
     pe_train = percentage_error(train[target].to_numpy(), pred_train)
     pe_test = percentage_error(test[target].to_numpy(), pred_test)
     _print_pe_summary(pe_summary(pe_test), label="test")
-    _print_pe_buckets(pe_buckets(pe_train), label="train")
-    _print_pe_buckets(pe_buckets(pe_test), label="test")
+    _print_pe_buckets(
+        pe_buckets(pe_train, train[weight].to_numpy(dtype=float)),
+        label="train",
+    )
+    _print_pe_buckets(
+        pe_buckets(pe_test, test[weight].to_numpy(dtype=float)),
+        label="test",
+    )
 
     # ---------- β summary ----------
     print("\n--- Top-20 |β| (posterior mean ± 94% HDI) ---")

@@ -109,9 +109,11 @@ def pe_distribution_plot(pe: np.ndarray, save_path: Path, clip: float = 2.0) -> 
 
 
 def print_pe_buckets(buckets: list[dict], label: str = "") -> None:
-    total = sum(b["count"] for b in buckets)
-    print(f"\n--- PE buckets ({label}, n={total:,}) ---")
-    print(f"  {'bucket':>18s}  {'count':>8s}   {'pct':>6s}")
+    total_w = sum(b["weight"] for b in buckets)
+    total_n = sum(b["count"] for b in buckets)
+    print(f"\n--- PE buckets ({label}, weighted by total_installs, "
+          f"total_w={total_w:,.0f}, cohorts={total_n:,}) ---")
+    print(f"  {'bucket':>18s}  {'installs':>12s}   {'pct':>6s}   {'cohorts':>8s}")
     for b in buckets:
         lo, hi = b["lo"], b["hi"]
         if np.isinf(lo):
@@ -120,7 +122,8 @@ def print_pe_buckets(buckets: list[dict], label: str = "") -> None:
             label_str = f"  > {int(lo*100):>+4d}%"
         else:
             label_str = f"{int(lo*100):>+4d}% .. {int(hi*100):>+4d}%"
-        print(f"  {label_str:>18s}  {b['count']:>8,}   {b['pct']*100:>5.1f}%")
+        print(f"  {label_str:>18s}  {b['weight']:>12,.0f}   "
+              f"{b['pct']*100:>5.1f}%   {b['count']:>8,}")
 
 
 def print_pe_summary(summary: dict, label: str = "") -> None:
@@ -182,8 +185,14 @@ def main() -> None:
     pe_test = percentage_error(test[target].to_numpy(), pred_test)
     print_pe_summary(pe_summary(pe_train), label="train")
     print_pe_summary(pe_summary(pe_test), label="test")
-    print_pe_buckets(pe_buckets(pe_train), label="train")
-    print_pe_buckets(pe_buckets(pe_test), label="test")
+    print_pe_buckets(
+        pe_buckets(pe_train, train[weight].to_numpy(dtype=float)),
+        label="train",
+    )
+    print_pe_buckets(
+        pe_buckets(pe_test, test[weight].to_numpy(dtype=float)),
+        label="test",
+    )
 
     print("\n--- Top-20 coefficients (|coef|) ---")
     coef_top = coefficient_importance(art, top=20)

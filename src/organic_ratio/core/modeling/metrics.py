@@ -61,33 +61,41 @@ def percentage_error(y_true, y_pred, eps: float = 1e-6) -> np.ndarray:
 DEFAULT_PE_BUCKETS = [-1.00, -0.50, -0.25, -0.10, 0.0, 0.10, 0.25, 0.50, 1.00]
 
 
-def pe_buckets(pe: np.ndarray, edges=DEFAULT_PE_BUCKETS) -> list[dict]:
+def pe_buckets(pe: np.ndarray, weights: np.ndarray, edges=DEFAULT_PE_BUCKETS) -> list[dict]:
     """
-    Histogram of PE binned with explicit edges (default: ±10/25/50/100%).
+    Histogram of PE binned with explicit edges (default: ±10/25/50/100%),
+    weighted by `weights` (total_installs per row).
 
-    Includes two open tails:
-        (-inf, edges[0])   and   (edges[-1], +inf)
+    Each bucket reports:
+        weight  — sum of weights of cohorts in that bucket
+        pct     — share of total weight
+        count   — raw cohort count (informational)
 
-    Returns list of dicts: [{lo, hi, count, pct}, ...] (NaN PEs dropped).
+    NaN PEs are dropped along with their weights.
     """
     pe = np.asarray(pe, dtype=float)
-    pe = pe[~np.isnan(pe)]
-    n = pe.size
+    weights = np.asarray(weights, dtype=float)
+    if pe.shape != weights.shape:
+        raise ValueError(f"pe shape {pe.shape} != weights shape {weights.shape}")
+
+    keep = ~np.isnan(pe)
+    pe, weights = pe[keep], weights[keep]
+    total_w = float(weights.sum())
 
     full_edges = [-np.inf, *edges, np.inf]
     rows = []
     for lo, hi in zip(full_edges[:-1], full_edges[1:]):
-        # left-open right-closed, except the very last is right-open to +inf
         if np.isinf(hi):
             mask = pe > lo
         else:
             mask = (pe > lo) & (pe <= hi)
-        count = int(mask.sum())
+        w = float(weights[mask].sum())
         rows.append({
             "lo": lo,
             "hi": hi,
-            "count": count,
-            "pct": float(count / n) if n else 0.0,
+            "weight": w,
+            "pct": w / total_w if total_w else 0.0,
+            "count": int(mask.sum()),
         })
     return rows
 
