@@ -147,7 +147,14 @@ def predict_panel(panel: pd.DataFrame, params: dict, adstock_l_max: int,
     dow_cols = [c for c in panel.columns if c.startswith("dow_")]
     if gamma is not None and "control" in gamma.dims:
         control_names = gamma["control"].values.tolist()
-        gamma_vals = {c: float(gamma.sel(control=c).item()) for c in control_names}
+        gamma_vals = {}
+        for c in control_names:
+            v = gamma.sel(control=c)
+            # collapse any non-control dim (e.g., geo) by mean
+            extra_dims = [d for d in v.dims if d != "control"]
+            if extra_dims:
+                v = v.mean(dim=extra_dims)
+            gamma_vals[c] = float(v.item() if v.ndim == 0 else v.values)
     else:
         gamma_vals = {}
 
