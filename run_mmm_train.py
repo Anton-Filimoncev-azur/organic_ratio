@@ -55,17 +55,17 @@ def main() -> None:
     if str(mmm_cfg.nuts_sampler) == "numpyro":
         report_jax_devices()
 
-    # ----- Load panel -----
+    # ----- Load TRAIN panel (test held out for run_mmm_eval.py) -----
     panel_cfg = cfg.datasets.mmm_panel
-    panel_path = Path(panel_cfg.local_feature_dir) / panel_cfg.filename
+    panel_path = Path(panel_cfg.local_feature_dir) / panel_cfg.train_filename
     if not panel_path.exists():
         raise FileNotFoundError(
-            f"MMM panel not found: {panel_path}. Run run_mmm_data.py first."
+            f"MMM train panel not found: {panel_path}. Run run_mmm_data.py first."
         )
-    print(f"Loading panel: {panel_path}")
+    print(f"Loading train panel: {panel_path}")
     panel = pl.read_parquet(panel_path).to_pandas()
     panel["install_date"] = pd.to_datetime(panel["install_date"])
-    print(f"Panel: {panel.shape}, geos={panel['geo'].nunique()}, "
+    print(f"Train panel: {panel.shape}, geos={panel['geo'].nunique()}, "
           f"dates={panel['install_date'].min().date()} → {panel['install_date'].max().date()}")
 
     target = str(mmm_cfg.target)

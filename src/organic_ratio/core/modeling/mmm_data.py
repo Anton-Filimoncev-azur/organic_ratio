@@ -24,13 +24,26 @@ ORGANIC_VALUE = "organic"
 def pick_top_channels(
     costs_lf: pl.LazyFrame,
     top_n: int,
+    date_from=None,
+    date_to=None,
 ) -> List[str]:
-    """Return media_source names with the largest total spend, excluding organic."""
+    """
+    Return media_source names with the largest spend in the date window.
+    Channels with total spend == 0 are skipped — they cause identifiability
+    issues in MMM (no signal to learn adstock/saturation from).
+    """
+    lf = costs_lf.filter(pl.col("media_source") != ORGANIC_VALUE)
+    if date_from is not None and date_to is not None:
+        lf = lf.filter(
+            (pl.col("install_date") >= pl.lit(str(date_from)).str.to_date()) &
+            (pl.col("install_date") < pl.lit(str(date_to)).str.to_date())
+        )
+
     totals = (
-        costs_lf
-        .filter(pl.col("media_source") != ORGANIC_VALUE)
+        lf
         .group_by("media_source")
         .agg(pl.col("spend").sum().alias("total_spend"))
+        .filter(pl.col("total_spend") > 0)        # drop zero-spend channels
         .sort("total_spend", descending=True)
         .head(top_n)
         .collect()
@@ -150,8 +163,11 @@ def build_mmm_panel(
         ["platform", "country_code", "install_date", "media_source", "spend"]
     )
 
-    top_channels = pick_top_channels(costs_lf, top_n=top_n_channels)
-    print(f"  top-{top_n_channels} channels: {top_channels}")
+    top_channels = pick_top_channels(
+        costs_lf, top_n=top_n_channels,
+        date_from=date_from, date_to=date_to,
+    )
+    print(f"  top-{top_n_channels} channels (non-zero spend in window): {top_channels}")
 
     installs_agg = aggregate_installs(installs_lf)
     spend_wide = aggregate_spend_wide(costs_lf, top_channels)

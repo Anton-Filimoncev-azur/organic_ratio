@@ -64,9 +64,25 @@ def main() -> None:
     out_cfg = cfg.datasets.mmm_panel
     out_dir = Path(out_cfg.local_feature_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / out_cfg.filename
-    panel.write_parquet(out_path, compression="zstd")
-    print(f"\nSaved: {out_path}")
+
+    # Full panel (train + test)
+    full_path = out_dir / out_cfg.filename
+    panel.write_parquet(full_path, compression="zstd")
+    print(f"\nSaved full:  {full_path}  ({len(panel)} rows)")
+
+    # Split by test_start_date for proper out-of-sample evaluation
+    test_start = pl.lit(str(cfg.test_start_date)).str.to_date()
+    train_panel = panel.filter(pl.col("install_date") < test_start)
+    test_panel = panel.filter(pl.col("install_date") >= test_start)
+
+    train_path = out_dir / out_cfg.train_filename
+    test_path = out_dir / out_cfg.test_filename
+    train_panel.write_parquet(train_path, compression="zstd")
+    test_panel.write_parquet(test_path, compression="zstd")
+    print(f"Saved train: {train_path}  ({len(train_panel)} rows, "
+          f"{train_panel['install_date'].min()} → {train_panel['install_date'].max()})")
+    print(f"Saved test:  {test_path}  ({len(test_panel)} rows, "
+          f"{test_panel['install_date'].min()} → {test_panel['install_date'].max()})")
 
 
 if __name__ == "__main__":

@@ -27,6 +27,10 @@ if not SRC_PATH.exists():
 if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 
+import warnings
+warnings.filterwarnings("ignore", category=RuntimeWarning,
+                        message=".*invalid value encountered in scalar divide.*")
+
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt

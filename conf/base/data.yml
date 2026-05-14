@@ -58,6 +58,8 @@ datasets:
     type: parquet
     local_feature_dir: ${paths.features}/mmm
     filename: mmm_panel.parquet
+    train_filename: mmm_panel_train.parquet
+    test_filename: mmm_panel_test.parquet
 
   targets:
     type: parquet
