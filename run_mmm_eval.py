@@ -269,8 +269,25 @@ def main() -> None:
     print("\nComputing predictions (manual model-formula)...")
     panel_pred = predict_panel(panel, params, adstock_l_max, target)
 
+    # pymc-marketing scales target internally (y / y_max per geo). Manual
+    # predictions are in scaled space; calibrate per-geo to original by
+    # matching aggregate on the TRAIN period.
     test_start = pd.to_datetime(str(cfg.test_start_date))
     test_end = pd.to_datetime(str(cfg.test_end_date))
+    train_mask = panel_pred["install_date"] < test_start
+
+    print("\nCalibrating per-geo scale on train (actual_sum / pred_sum):")
+    scale_per_geo = (
+        panel_pred[train_mask]
+        .groupby("geo")
+        .apply(lambda g: g[target].sum() / max(g["pred"].sum(), 1e-9))
+        .rename("scale")
+    )
+    print(scale_per_geo.describe().to_string())
+    panel_pred = panel_pred.merge(scale_per_geo.reset_index(), on="geo", how="left")
+    panel_pred["pred"] = panel_pred["pred"] * panel_pred["scale"].fillna(1.0)
+    panel_pred = panel_pred.drop(columns=["scale"])
+
     test = panel_pred[
         (panel_pred["install_date"] >= test_start) &
         (panel_pred["install_date"] < test_end)
