@@ -119,6 +119,9 @@ def main() -> None:
         nuts_sampler_kwargs=sampler_kwargs or None,
         random_seed=int(mmm_cfg.random_seed),
         progressbar=True,
+        # Skip log-likelihood computation (heavy: ~N_obs × draws × chains)
+        # — saves hours on per-geo MMM. Re-enable for LOO / WAIC analysis.
+        idata_kwargs={"log_likelihood": False},
     )
 
     # ----- Save trace IMMEDIATELY (the most important artifact) -----

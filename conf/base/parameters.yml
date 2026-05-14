@@ -43,7 +43,7 @@ modeling:
   mmm:
     target: organic_installs            # halo MMM: predict organic from paid spends
     top_n_channels: 10                  # top media_source by total spend; rest -> 'other_paid'
-    min_country_installs: 5000          # drop small countries — fewer geos = faster + better convergence
+    min_country_installs: 100000        # only top-N largest countries (target ~20-40 geos)
     adstock_l_max: 7                    # geometric adstock window, days
     saturation: logistic                # logistic | michaelis_menten | hill
     geo_dim: true                       # True: hierarchical per (platform, country)
