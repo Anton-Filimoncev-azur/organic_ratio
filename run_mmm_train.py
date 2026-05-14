@@ -121,64 +121,64 @@ def main() -> None:
         progressbar=True,
     )
 
-    # ----- Save -----
+    # ----- Save trace IMMEDIATELY (the most important artifact) -----
     model_dir = Path("data/models/mmm")
     model_dir.mkdir(parents=True, exist_ok=True)
     mmm_path = model_dir / "mmm.nc"
+    print(f"\nSaving MMM trace → {mmm_path}")
     mmm.save(str(mmm_path))
-    print(f"\nSaved MMM: {mmm_path}")
+    print(f"Saved.")
 
-    # ----- In-sample predictions -----
-    print("\nComputing posterior predictive (in-sample)...")
-    y_pred = mmm.predict(X)
-    id_cols = ["install_date"] + (["geo", "platform", "country_code"] if geo_dim else [])
-    id_cols = [c for c in id_cols if c in panel.columns]
-    pred_df = panel[id_cols + [target]].reset_index(drop=True).copy()
-    pred_df["pred"] = np.asarray(y_pred)
-    pred_df["abs_err"] = (pred_df[target] - pred_df["pred"]).abs()
+    compute_predict = bool(mmm_cfg.get("compute_predict", False))
+    save_plots = bool(mmm_cfg.get("save_plots", False))
 
-    pred_dir = Path("data/predictions")
-    pred_dir.mkdir(parents=True, exist_ok=True)
-    pl.from_pandas(pred_df).write_parquet(
-        pred_dir / "mmm_train.parquet", compression="zstd"
-    )
-    print(f"Saved predictions: {pred_dir / 'mmm_train.parquet'}")
+    # ----- (optional) In-sample predictions — can be slow for large per-geo models
+    if compute_predict:
+        print("\nComputing posterior predictive (in-sample)...")
+        try:
+            y_pred = mmm.predict(X)
+            id_cols = ["install_date"] + (["geo", "platform", "country_code"] if geo_dim else [])
+            id_cols = [c for c in id_cols if c in panel.columns]
+            pred_df = panel[id_cols + [target]].reset_index(drop=True).copy()
+            pred_df["pred"] = np.asarray(y_pred)
+            pred_df["abs_err"] = (pred_df[target] - pred_df["pred"]).abs()
 
-    # ----- Plots -----
-    plot_dir = Path("data/plots")
-    plot_dir.mkdir(parents=True, exist_ok=True)
+            pred_dir = Path("data/predictions")
+            pred_dir.mkdir(parents=True, exist_ok=True)
+            pl.from_pandas(pred_df).write_parquet(
+                pred_dir / "mmm_train.parquet", compression="zstd"
+            )
+            print(f"Saved predictions: {pred_dir / 'mmm_train.parquet'}")
 
-    try:
-        fig = mmm.plot_channel_contributions_grid()
-        fig.savefig(plot_dir / "mmm_contribution.png", dpi=120, bbox_inches="tight")
-        plt.close(fig)
-        print(f"Saved: {plot_dir / 'mmm_contribution.png'}")
-    except Exception as e:
-        print(f"[warn] contribution plot failed: {e}")
+            err = pred_df[target] - pred_df["pred"]
+            rmse = float(np.sqrt((err ** 2).mean()))
+            mae = float(err.abs().mean())
+            ybar = pred_df[target].mean()
+            r2 = 1.0 - (err ** 2).sum() / ((pred_df[target] - ybar) ** 2).sum()
+            print(f"In-sample: RMSE={rmse:.2f}, MAE={mae:.2f}, R²={r2:.4f}")
+        except Exception as e:
+            print(f"[warn] predict failed: {e}")
+    else:
+        print("\nSkipping predict (set mmm.compute_predict: true to enable).")
 
-    try:
-        fig = mmm.plot_direct_contribution_curves()
-        fig.savefig(plot_dir / "mmm_saturation.png", dpi=120, bbox_inches="tight")
-        plt.close(fig)
-        print(f"Saved: {plot_dir / 'mmm_saturation.png'}")
-    except Exception as e:
-        print(f"[warn] saturation plot failed: {e}")
-
-    try:
-        fig = mmm.plot_waterfall_components_decomposition()
-        fig.savefig(plot_dir / "mmm_channel_share.png", dpi=120, bbox_inches="tight")
-        plt.close(fig)
-        print(f"Saved: {plot_dir / 'mmm_channel_share.png'}")
-    except Exception as e:
-        print(f"[warn] waterfall plot failed: {e}")
-
-    # ----- Quick metrics -----
-    err = pred_df[target] - pred_df["pred"]
-    rmse = float(np.sqrt((err ** 2).mean()))
-    mae = float(err.abs().mean())
-    ybar = pred_df[target].mean()
-    r2 = 1.0 - (err ** 2).sum() / ((pred_df[target] - ybar) ** 2).sum()
-    print(f"\nIn-sample: RMSE={rmse:.2f}, MAE={mae:.2f}, R²={r2:.4f}")
+    # ----- (optional) Plots
+    if save_plots:
+        plot_dir = Path("data/plots")
+        plot_dir.mkdir(parents=True, exist_ok=True)
+        for name, fn in [
+            ("contribution", "plot_channel_contributions_grid"),
+            ("saturation", "plot_direct_contribution_curves"),
+            ("channel_share", "plot_waterfall_components_decomposition"),
+        ]:
+            try:
+                fig = getattr(mmm, fn)()
+                fig.savefig(plot_dir / f"mmm_{name}.png", dpi=120, bbox_inches="tight")
+                plt.close(fig)
+                print(f"Saved: {plot_dir / f'mmm_{name}.png'}")
+            except Exception as e:
+                print(f"[warn] {name} plot failed: {e}")
+    else:
+        print("Skipping plots (set mmm.save_plots: true to enable).")
 
 
 if __name__ == "__main__":

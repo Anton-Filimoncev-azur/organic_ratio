@@ -43,7 +43,7 @@ modeling:
   mmm:
     target: organic_installs            # halo MMM: predict organic from paid spends
     top_n_channels: 10                  # top media_source by total spend; rest -> 'other_paid'
-    min_country_installs: 500           # drop countries with fewer total installs in train
+    min_country_installs: 5000          # drop small countries — fewer geos = faster + better convergence
     adstock_l_max: 7                    # geometric adstock window, days
     saturation: logistic                # logistic | michaelis_menten | hill
     geo_dim: true                       # True: hierarchical per (platform, country)
@@ -55,6 +55,9 @@ modeling:
     nuts_sampler: numpyro
     chain_method: vectorized
     random_seed: 42
+    # Post-fit heavy operations — skip on first iterations to avoid long waits.
+    compute_predict: false              # if true, mmm.predict() over full X
+    save_plots: false                   # if true, generate contribution / saturation / waterfall pngs
 
   pymc:
     draws: 500
