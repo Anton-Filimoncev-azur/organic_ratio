@@ -98,9 +98,8 @@ def beta_plot(beta_df: pd.DataFrame, save_path: Path) -> None:
     fig, ax = plt.subplots(figsize=(8, max(4, 0.3 * len(df))))
     errs = np.vstack([df["mean"] - df["hdi_3%"], df["hdi_97%"] - df["mean"]])
     colors = ["#d62728" if m < 0 else "#2ca02c" for m in df["mean"]]
-    ax.errorbar(df["mean"], df["feature"], xerr=errs, fmt="o",
-                ecolor="gray", elinewidth=1, capsize=2,
-                markerfacecolor=colors, markeredgecolor="black")
+    ax.barh(df["feature"], df["mean"], color=colors, alpha=0.85,
+            xerr=errs, ecolor="gray", capsize=2)
     ax.axvline(0, color="k", lw=0.5)
     ax.set_title("PyMC β coefficients (posterior mean ± 94% HDI)")
     ax.set_xlabel("β (standardized features)")
