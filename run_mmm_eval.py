@@ -73,7 +73,11 @@ PARAM_CANDIDATES = {
     "alpha":     ["adstock_alpha", "alpha", "adstock_alpha_channel"],
     "beta":      ["saturation_beta", "beta_channel", "saturation_beta_channel"],
     "lam":       ["saturation_lam", "lam_channel", "saturation_lam_channel"],
-    "intercept": ["intercept", "baseline", "intercept_geo"],
+    "intercept": [
+        "intercept", "baseline", "intercept_geo",
+        "mu_intercept", "intercept_contribution",
+        "y_intercept", "alpha_intercept",
+    ],
     "gamma":     ["gamma_control", "gamma", "control_contribution"],
 }
 
@@ -91,6 +95,9 @@ def _find_var(post, kind: str, required: bool = True):
 
 
 def extract_params(post):
+    print("  All posterior data_vars (name → dims → shape):")
+    for v in post.data_vars:
+        print(f"    {v:40s}  {post[v].dims}  {tuple(post[v].shape)}")
     a_name = _find_var(post, "alpha")
     b_name = _find_var(post, "beta")
     l_name = _find_var(post, "lam")
