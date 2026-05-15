@@ -133,12 +133,11 @@ def main() -> None:
     print(f"X_test: {X_test.shape}, cols={list(X_test.columns)}")
 
     # ----- Posterior predictive (include training tail for adstock warmup) -----
-    print("\nRunning mmm.sample_posterior_predictive(...) with original_scale=True...")
+    print("\nRunning mmm.sample_posterior_predictive(X_test, include_last_observations=True)...")
     pp_idata = mmm.sample_posterior_predictive(
         X_test,
         extend_idata=False,
         include_last_observations=True,
-        original_scale=True,
         progressbar=True,
     )
 
@@ -167,8 +166,22 @@ def main() -> None:
     pred_mean = pp_da.mean(dim=reduce_dims)
     print(f"  after collapsing {reduce_dims}: dims={pred_mean.dims}, shape={pred_mean.shape}")
 
-    # original_scale=True in sample_posterior_predictive should put pred in
-    # original units. No extra calibration needed.
+    # pymc-marketing scales target per-geo by y_train_max[geo]. Predictions
+    # come back in scaled space; multiply by per-geo y_train_max to invert.
+    import xarray as xr
+    train_path = Path(panel_cfg.local_feature_dir) / panel_cfg.train_filename
+    train = pl.read_parquet(train_path).to_pandas()
+    train["install_date"] = pd.to_datetime(train["install_date"])
+    y_max_per_geo = train.groupby("geo")[target].max().to_dict()
+    print("\nPer-geo y_train_max (inverse-scaling factors):")
+    for g, v in sorted(y_max_per_geo.items()):
+        print(f"  {g:18s}  {v:>10,.0f}")
+
+    geo_coord = pred_mean.coords["geo"].values
+    scale_arr = np.array([y_max_per_geo.get(str(g), 1.0) for g in geo_coord])
+    scale_da = xr.DataArray(scale_arr, dims=["geo"], coords={"geo": geo_coord})
+    pred_mean = pred_mean * scale_da
+    print(f"  pred_mean after per-geo unscale: dims={pred_mean.dims}, shape={pred_mean.shape}")
 
     # Convert to long-form dataframe
     pred_df = pred_mean.to_dataframe(name="pred").reset_index()
