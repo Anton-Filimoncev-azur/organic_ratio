@@ -166,22 +166,54 @@ def main() -> None:
     pred_mean = pp_da.mean(dim=reduce_dims)
     print(f"  after collapsing {reduce_dims}: dims={pred_mean.dims}, shape={pred_mean.shape}")
 
-    # pymc-marketing scales target per-geo by y_train_max[geo]. Predictions
-    # come back in scaled space; multiply by per-geo y_train_max to invert.
+    # ----- Empirical calibration: run sample_posterior_predictive on TRAIN -----
+    # to derive the per-geo scale factor pymc-marketing applies internally.
     import xarray as xr
     train_path = Path(panel_cfg.local_feature_dir) / panel_cfg.train_filename
     train = pl.read_parquet(train_path).to_pandas()
     train["install_date"] = pd.to_datetime(train["install_date"])
-    y_max_per_geo = train.groupby("geo")[target].max().to_dict()
-    print("\nPer-geo y_train_max (inverse-scaling factors):")
-    for g, v in sorted(y_max_per_geo.items()):
-        print(f"  {g:18s}  {v:>10,.0f}")
+    train = train.sort_values(["geo", "install_date"]).reset_index(drop=True)
+
+    X_train = train[keep_cols].copy()
+    print(f"\nRunning sample_posterior_predictive on TRAIN to derive per-geo scale...")
+    print(f"  X_train: {X_train.shape}")
+    pp_train_idata = mmm.sample_posterior_predictive(
+        X_train,
+        extend_idata=False,
+        include_last_observations=False,
+        progressbar=True,
+    )
+    pp_train_group = pp_train_idata.posterior_predictive if hasattr(pp_train_idata, "posterior_predictive") else pp_train_idata
+    pp_train_da = pp_train_group[output_var]
+    train_reduce_dims = [d for d in pp_train_da.dims if d in ("chain", "draw", "sample")]
+    pred_train_mean = pp_train_da.mean(dim=train_reduce_dims)
+    print(f"  pred_train_mean: dims={pred_train_mean.dims}, shape={pred_train_mean.shape}")
+
+    # Convert to long-form for per-geo aggregation
+    pred_train_df = pred_train_mean.to_dataframe(name="pred_scaled").reset_index()
+    pred_train_df["date"] = pd.to_datetime(pred_train_df["date"])
+    train_merged = train.merge(
+        pred_train_df, left_on=["install_date", "geo"],
+        right_on=["date", "geo"], how="inner",
+    ).drop(columns=["date"])
+
+    scale_per_geo = (
+        train_merged.groupby("geo")
+        .apply(
+            lambda g: g[target].sum() / max(g["pred_scaled"].sum(), 1e-9),
+            include_groups=False,
+        )
+        .to_dict()
+    )
+    print(f"\nDerived per-geo scale (actual_train / pred_scaled_train):")
+    for g, v in sorted(scale_per_geo.items()):
+        print(f"  {g:18s}  {v:>10,.2f}")
 
     geo_coord = pred_mean.coords["geo"].values
-    scale_arr = np.array([y_max_per_geo.get(str(g), 1.0) for g in geo_coord])
+    scale_arr = np.array([scale_per_geo.get(str(g), 1.0) for g in geo_coord])
     scale_da = xr.DataArray(scale_arr, dims=["geo"], coords={"geo": geo_coord})
     pred_mean = pred_mean * scale_da
-    print(f"  pred_mean after per-geo unscale: dims={pred_mean.dims}, shape={pred_mean.shape}")
+    print(f"  pred_mean after per-geo calibration: dims={pred_mean.dims}, shape={pred_mean.shape}")
 
     # Convert to long-form dataframe
     pred_df = pred_mean.to_dataframe(name="pred").reset_index()
