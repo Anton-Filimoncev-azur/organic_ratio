@@ -133,11 +133,12 @@ def main() -> None:
     print(f"X_test: {X_test.shape}, cols={list(X_test.columns)}")
 
     # ----- Posterior predictive (include training tail for adstock warmup) -----
-    print("\nRunning mmm.sample_posterior_predictive(X_test, include_last_observations=True)...")
+    print("\nRunning mmm.sample_posterior_predictive(...) with original_scale=True...")
     pp_idata = mmm.sample_posterior_predictive(
         X_test,
         extend_idata=False,
         include_last_observations=True,
+        original_scale=True,
         progressbar=True,
     )
 
@@ -166,20 +167,8 @@ def main() -> None:
     pred_mean = pp_da.mean(dim=reduce_dims)
     print(f"  after collapsing {reduce_dims}: dims={pred_mean.dims}, shape={pred_mean.shape}")
 
-    # pymc-marketing may return predictions in SCALED space (target / y_max).
-    # Calibrate per-geo by matching training organic_installs sum.
-    train_path = Path(panel_cfg.local_feature_dir) / panel_cfg.train_filename
-    if train_path.exists():
-        train = pl.read_parquet(train_path).to_pandas()
-        train["install_date"] = pd.to_datetime(train["install_date"])
-        # If pp_idata has training-period contributions, use them; else use the
-        # mean of returned pred over training analog days. Simplest: use observed
-        # train target's max as scale (matches pymc-marketing default).
-        global_scale = float(train[target].max())
-        # pick whichever is bigger so we don't underscale
-        global_scale = max(global_scale, 1.0)
-        print(f"  Applying global scale factor (y_train_max) = {global_scale:.2f}")
-        pred_mean = pred_mean * global_scale
+    # original_scale=True in sample_posterior_predictive should put pred in
+    # original units. No extra calibration needed.
 
     # Convert to long-form dataframe
     pred_df = pred_mean.to_dataframe(name="pred").reset_index()
