@@ -1,17 +1,13 @@
 """
-MMM in-sample evaluation using pre-computed contributions from trace.
+Out-of-sample MMM eval via `sample_posterior_predictive` on test panel.
 
-pymc-marketing's multidim MMM stores `channel_contribution`, `control_contribution`,
-`intercept_contribution` in the posterior for the TRAINING period dates. We sum
-them per (date, geo) to get prediction in scaled space, then calibrate to
-original scale by matching observed training totals per geo.
-
-NOTE: This is in-sample (training period) eval. Out-of-sample test eval needs
-a working `mmm.predict()` for multidim — separate todo.
+Loads the multidim MMM via pymc-marketing's MMM class (not just trace), runs
+posterior predictive on test period (with training-tail adstock warmup),
+extracts per-(date, geo) predictions and computes test metrics.
 
 Outputs:
-    data/predictions/mmm_insample.parquet
-    data/plots/mmm_insample_pred_vs_actual.png
+    data/predictions/mmm_test.parquet
+    data/plots/mmm_test_pred_vs_actual.png
 """
 from dotenv import load_dotenv
 load_dotenv()
@@ -36,7 +32,8 @@ if str(SRC_PATH) not in sys.path:
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import arviz as az
+
+from pymc_marketing.mmm.multidimensional import MMM
 
 from organic_ratio.utils.config import load_config
 from organic_ratio.core.modeling.metrics import (
@@ -45,6 +42,7 @@ from organic_ratio.core.modeling.metrics import (
     pe_summary,
     pe_buckets,
 )
+from organic_ratio.core.modeling.pymc_model import report_jax_devices
 
 
 def _print_pe_summary(s, label):
@@ -80,7 +78,7 @@ def pred_vs_actual_plot(df: pd.DataFrame, target: str, save_path: Path) -> None:
     ax.plot([0, lim], [0, lim], "k--", alpha=0.5, label="perfect")
     ax.set_xlabel(f"predicted {target}")
     ax.set_ylabel(f"actual {target}")
-    ax.set_title(f"MMM in-sample predictions  (n={len(df):,})")
+    ax.set_title(f"MMM out-of-sample test predictions  (n={len(df):,})")
     ax.legend()
     save_path.parent.mkdir(parents=True, exist_ok=True)
     fig.tight_layout()
@@ -90,70 +88,110 @@ def pred_vs_actual_plot(df: pd.DataFrame, target: str, save_path: Path) -> None:
 
 def main() -> None:
     cfg = load_config()
-    target = str(cfg.modeling.mmm.target)
+    mmm_cfg = cfg.modeling.mmm
+    target = str(mmm_cfg.target)
 
-    # ----- Load trace -----
+    if str(mmm_cfg.nuts_sampler) == "numpyro":
+        report_jax_devices()
+
+    # ----- Load MMM via pymc-marketing class (preserves transformers) -----
     mmm_path = Path("data/models/mmm/mmm.nc")
     if not mmm_path.exists():
         raise FileNotFoundError(f"MMM not found: {mmm_path}")
-    print(f"Loading: {mmm_path}")
-    idata = az.from_netcdf(mmm_path)
-    post = idata.posterior
+    print(f"Loading MMM via pymc-marketing: {mmm_path}")
+    mmm = MMM.load(str(mmm_path))
+    print(f"  target_column:   {getattr(mmm, 'target_column', None)}")
+    print(f"  date_column:     {getattr(mmm, 'date_column', None)}")
+    print(f"  channel_columns: {getattr(mmm, 'channel_columns', None)}")
+    print(f"  control_columns: {getattr(mmm, 'control_columns', None)}")
+    print(f"  dims:            {getattr(mmm, 'dims', None)}")
+    print(f"  output_var:      {getattr(mmm, 'output_var', '?')}")
 
-    # ----- Sum contributions to get pred[date, geo] in scaled space -----
-    print("\nUsing pre-computed contributions from trace:")
-    halo = post["channel_contribution"].mean(dim=("chain", "draw")).sum("channel")
-    ctrl = post["control_contribution"].mean(dim=("chain", "draw")).sum("control")
-    intercept = post["intercept_contribution"].mean(dim=("chain", "draw"))
-    print(f"  halo shape:       {dict(zip(halo.dims, halo.shape))}")
-    print(f"  ctrl shape:       {dict(zip(ctrl.dims, ctrl.shape))}")
-    print(f"  intercept shape:  {dict(zip(intercept.dims, intercept.shape))}")
-
-    pred_scaled = halo + ctrl + intercept   # broadcast (date, geo)
-    pred_df = pred_scaled.to_dataframe(name="pred_scaled").reset_index()
-    # date in trace is a coord — typically numeric or datetime
-    print(f"  pred_scaled rows: {len(pred_df)}")
-    print(f"  date coord sample:    {pred_df['date'].iloc[0]}  "
-          f"(dtype: {pred_df['date'].dtype})")
-
-    # ----- Load panel and join -----
+    # ----- Load test panel -----
     panel_cfg = cfg.datasets.mmm_panel
-    panel_path = Path(panel_cfg.local_feature_dir) / panel_cfg.train_filename
-    if not panel_path.exists():
-        panel_path = Path(panel_cfg.local_feature_dir) / panel_cfg.filename
-    panel = pl.read_parquet(panel_path).to_pandas()
-    panel["install_date"] = pd.to_datetime(panel["install_date"])
-    print(f"\n  panel: {panel.shape}, dates={panel['install_date'].min().date()} "
-          f"→ {panel['install_date'].max().date()}")
+    test_path = Path(panel_cfg.local_feature_dir) / panel_cfg.test_filename
+    if not test_path.exists():
+        raise FileNotFoundError(f"Test panel not found: {test_path}")
+    test = pl.read_parquet(test_path).to_pandas()
+    test["install_date"] = pd.to_datetime(test["install_date"])
+    test = test.sort_values(["geo", "install_date"]).reset_index(drop=True)
+    print(f"\nTest panel: {test.shape}, "
+          f"{test['install_date'].min().date()} → {test['install_date'].max().date()}, "
+          f"geos={test['geo'].nunique()}")
 
-    # try to align date coord with panel install_date
-    try:
-        pred_df["date"] = pd.to_datetime(pred_df["date"])
-        merged = panel.merge(
-            pred_df, left_on=["install_date", "geo"],
-            right_on=["date", "geo"], how="inner",
-        ).drop(columns=["date"])
-    except Exception as e:
-        print(f"  [warn] date type mismatch: {e}")
-        # fallback: index-based merge (assumes trace dates aligned with panel sorted)
-        raise
+    # ----- Assemble X with the exact columns MMM expects -----
+    channel_cols = list(mmm.channel_columns)
+    control_cols = list(mmm.control_columns or [])
+    date_col = mmm.date_column
+    geo_col = "geo"
 
-    print(f"  merged: {merged.shape}")
+    keep_cols = [date_col, geo_col] + channel_cols + control_cols
+    missing = [c for c in keep_cols if c not in test.columns]
+    if missing:
+        raise KeyError(f"Test panel missing columns: {missing}")
+    X_test = test[keep_cols].copy()
+    print(f"X_test: {X_test.shape}, cols={list(X_test.columns)}")
 
-    # ----- Per-geo calibration: scaled → original -----
-    print("\nCalibrating per-geo scale (actual_sum / pred_scaled_sum on training):")
-    scale_per_geo = (
-        merged.groupby("geo")
-        .apply(
-            lambda g: g[target].sum() / max(g["pred_scaled"].sum(), 1e-9),
-            include_groups=False,
-        )
-        .rename("scale")
+    # ----- Posterior predictive (include training tail for adstock warmup) -----
+    print("\nRunning mmm.sample_posterior_predictive(X_test, include_last_observations=True)...")
+    pp_idata = mmm.sample_posterior_predictive(
+        X_test,
+        extend_idata=False,
+        include_last_observations=True,
+        progressbar=True,
     )
-    print(scale_per_geo.describe().to_string())
 
-    merged = merged.merge(scale_per_geo.reset_index(), on="geo", how="left")
-    merged["pred"] = merged["pred_scaled"] * merged["scale"].fillna(1.0)
+    # ----- Extract output variable -----
+    output_var = getattr(mmm, "output_var", "y")
+    print(f"\nposterior_predictive groups: {list(pp_idata.groups())}")
+    pp_group = pp_idata.posterior_predictive if hasattr(pp_idata, "posterior_predictive") else pp_idata
+    print(f"posterior_predictive vars: {list(pp_group.data_vars)}")
+
+    if output_var not in pp_group.data_vars:
+        # try the first variable as fallback
+        output_var = list(pp_group.data_vars)[0]
+        print(f"  [warn] output_var fallback to: {output_var}")
+
+    pp_da = pp_group[output_var]
+    print(f"  {output_var} dims:  {pp_da.dims}")
+    print(f"  {output_var} shape: {pp_da.shape}")
+
+    # Average over chain, draw → posterior mean per (date, geo) (or whatever remaining dims)
+    reduce_dims = [d for d in pp_da.dims if d in ("chain", "draw")]
+    pred_mean = pp_da.mean(dim=reduce_dims)
+    print(f"  after collapsing chain/draw: dims={pred_mean.dims}, shape={pred_mean.shape}")
+
+    # Convert to long-form dataframe
+    pred_df = pred_mean.to_dataframe(name="pred").reset_index()
+    print(f"  pred_df: {pred_df.shape}, cols={list(pred_df.columns)}")
+
+    # If pred has "date" dim (could be from training+test concat), filter to test dates
+    if "date" in pred_df.columns:
+        pred_df["date"] = pd.to_datetime(pred_df["date"])
+        test_dates = pd.to_datetime(test["install_date"].unique())
+        pred_df = pred_df[pred_df["date"].isin(test_dates)]
+        merge_left = "date"
+    else:
+        merge_left = None
+
+    # Merge with test by (date, geo)
+    if merge_left is not None and "geo" in pred_df.columns:
+        merged = test.merge(
+            pred_df, left_on=["install_date", "geo"],
+            right_on=[merge_left, "geo"], how="inner",
+        )
+        if merge_left != "install_date":
+            merged = merged.drop(columns=[merge_left])
+    else:
+        raise RuntimeError(
+            f"Cannot align posterior_predictive output with test panel. "
+            f"pred_df columns: {list(pred_df.columns)}"
+        )
+
+    print(f"\nMerged: {merged.shape}")
+    if len(merged) == 0:
+        raise RuntimeError("Empty merge — date/geo mismatch between pred and test")
+
     merged["abs_err"] = (merged[target] - merged["pred"]).abs()
 
     # ----- Metrics -----
@@ -161,12 +199,12 @@ def main() -> None:
     y_p = merged["pred"].to_numpy(dtype=float)
     w = merged["total_installs"].to_numpy(dtype=float)
 
-    print("\n--- In-sample metrics ---")
-    report(y_true, y_p, w, label="in-sample")
+    print("\n--- Test (out-of-sample) metrics ---")
+    report(y_true, y_p, w, label="test")
 
     pe = percentage_error(y_true, y_p)
-    _print_pe_summary(pe_summary(pe), label="in-sample")
-    _print_pe_buckets(pe_buckets(pe, w), label="in-sample")
+    _print_pe_summary(pe_summary(pe), label="test")
+    _print_pe_buckets(pe_buckets(pe, w), label="test")
 
     # ----- Save -----
     keep = ["install_date", "geo", "platform", "country_code",
@@ -176,12 +214,12 @@ def main() -> None:
 
     pred_dir = Path("data/predictions")
     pred_dir.mkdir(parents=True, exist_ok=True)
-    out_path = pred_dir / "mmm_insample.parquet"
+    out_path = pred_dir / "mmm_test.parquet"
     pl.from_pandas(out).write_parquet(out_path, compression="zstd")
     print(f"\nSaved: {out_path}")
 
-    pred_vs_actual_plot(out, target, Path("data/plots/mmm_insample_pred_vs_actual.png"))
-    print(f"Saved plot: data/plots/mmm_insample_pred_vs_actual.png")
+    pred_vs_actual_plot(out, target, Path("data/plots/mmm_test_pred_vs_actual.png"))
+    print(f"Saved plot: data/plots/mmm_test_pred_vs_actual.png")
 
 
 if __name__ == "__main__":
