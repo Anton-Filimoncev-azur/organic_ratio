@@ -143,8 +143,13 @@ def main() -> None:
 
     # ----- Extract output variable -----
     output_var = getattr(mmm, "output_var", "y")
-    print(f"\nposterior_predictive groups: {list(pp_idata.groups())}")
-    pp_group = pp_idata.posterior_predictive if hasattr(pp_idata, "posterior_predictive") else pp_idata
+    # pp_idata can be either an arviz InferenceData OR a bare xarray Dataset
+    if hasattr(pp_idata, "groups"):
+        print(f"\nposterior_predictive groups: {list(pp_idata.groups())}")
+        pp_group = pp_idata.posterior_predictive
+    else:
+        print(f"\nReturned object type: {type(pp_idata).__name__}")
+        pp_group = pp_idata
     print(f"posterior_predictive vars: {list(pp_group.data_vars)}")
 
     if output_var not in pp_group.data_vars:
