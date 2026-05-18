@@ -137,12 +137,50 @@ def filter_countries(panel: pl.DataFrame, min_installs: int) -> pl.DataFrame:
     return panel.join(keep, on="country_code", how="inner")
 
 
+def aggregate_by_cadence(panel: pl.DataFrame, cadence_days: int) -> pl.DataFrame:
+    """
+    Roll up daily panel to N-day buckets.
+
+    For each (platform, country, bucket_start):
+        organic_installs, total_installs    — SUM
+        spend_*                              — SUM
+        dow_* (если есть)                    — dropped (irrelevant for weekly)
+    bucket_start = first day of the window aligned to period anchor.
+    """
+    if cadence_days <= 1:
+        return panel
+
+    anchor = panel["install_date"].min()
+    panel = panel.with_columns(
+        (
+            (pl.col("install_date") - pl.lit(anchor)).dt.total_days()
+            // cadence_days
+        ).alias("_bucket_idx"),
+    )
+    panel = panel.with_columns(
+        (pl.lit(anchor) + pl.duration(days=pl.col("_bucket_idx") * cadence_days))
+        .alias("bucket_start")
+    )
+
+    spend_cols = [c for c in panel.columns if c.startswith("spend_")]
+    sum_cols = ["organic_installs", "total_installs"] + spend_cols
+
+    agg = (
+        panel.group_by(["platform", "country_code", "bucket_start"])
+        .agg([pl.col(c).sum().alias(c) for c in sum_cols])
+        .sort(["platform", "country_code", "bucket_start"])
+        .rename({"bucket_start": "install_date"})  # re-use date column name
+    )
+    return agg
+
+
 def build_mmm_panel(
     *,
     installs_path: Path,
     costs_path: Path,
     top_n_channels: int,
     min_country_installs: int,
+    cadence_days: int = 1,
     date_from,
     date_to,
 ) -> Tuple[pl.DataFrame, List[str]]:
@@ -187,11 +225,20 @@ def build_mmm_panel(
         (pl.col("install_date") < pl.lit(str(date_to)).str.to_date())
     )
 
-    # country filter
-    panel = filter_countries(panel, min_country_installs)
+    # country filter (skip if min_country_installs == 0)
+    if min_country_installs > 0:
+        panel = filter_countries(panel, min_country_installs)
 
-    # seasonality + geo key
-    panel = add_seasonality(panel)
+    # cadence aggregation (daily → N-day buckets)
+    if cadence_days > 1:
+        print(f"  aggregating to {cadence_days}-day buckets...")
+        panel = aggregate_by_cadence(panel, cadence_days)
+
+    # seasonality (dow only meaningful for daily cadence)
+    if cadence_days <= 1:
+        panel = add_seasonality(panel)
+
+    # geo key
     panel = panel.with_columns(
         (pl.col("platform") + "_" + pl.col("country_code")).alias("geo")
     )

@@ -43,8 +43,9 @@ modeling:
   mmm:
     target: organic_installs            # halo MMM: predict organic from paid spends
     top_n_channels: 10                  # top media_source by total spend; rest -> 'other_paid'
-    min_country_installs: 100000        # only top-N largest countries (target ~20-40 geos)
-    adstock_l_max: 7                    # geometric adstock window, days
+    min_country_installs: 0             # 0 = no country filter (all geos with any data)
+    cadence_days: 7                     # aggregation window: 1 = daily, 7 = weekly
+    adstock_l_max: 4                    # carry-over windows (in cadence units, not days)
     saturation: logistic                # logistic | michaelis_menten | hill
     geo_dim: true                       # True: hierarchical per (platform, country)
     yearly_seasonality: 0               # 0 = off; >0 = N Fourier terms
