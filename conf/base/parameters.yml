@@ -43,7 +43,8 @@ modeling:
   mmm:
     target: organic_installs            # halo MMM: predict organic from paid spends
     top_n_channels: 10                  # top media_source by total spend; rest -> 'other_paid'
-    min_country_installs: 50            # drop countries with very low install volume
+    min_country_installs: 0             # 0 = no min-volume filter (use top_n_geos instead)
+    top_n_geos: 100                     # keep top-N (platform, country) pairs by total installs
     cadence_days: 7                     # aggregation window: 1 = daily, 7 = weekly
     adstock_l_max: 4                    # carry-over windows (in cadence units, not days)
     saturation: logistic                # logistic | michaelis_menten | hill

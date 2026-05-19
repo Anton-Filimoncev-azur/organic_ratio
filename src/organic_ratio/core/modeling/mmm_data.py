@@ -137,6 +137,21 @@ def filter_countries(panel: pl.DataFrame, min_installs: int) -> pl.DataFrame:
     return panel.join(keep, on="country_code", how="inner")
 
 
+def keep_top_n_geos(panel: pl.DataFrame, top_n: int) -> pl.DataFrame:
+    """Keep only the top-N (platform, country_code) pairs by total install volume."""
+    if top_n <= 0:
+        return panel
+    keep = (
+        panel
+        .group_by(["platform", "country_code"])
+        .agg(pl.col("total_installs").sum().alias("geo_total"))
+        .sort("geo_total", descending=True)
+        .head(top_n)
+        .select(["platform", "country_code"])
+    )
+    return panel.join(keep, on=["platform", "country_code"], how="inner")
+
+
 def aggregate_by_cadence(panel: pl.DataFrame, cadence_days: int) -> pl.DataFrame:
     """
     Roll up daily panel to N-day buckets.
@@ -180,6 +195,7 @@ def build_mmm_panel(
     costs_path: Path,
     top_n_channels: int,
     min_country_installs: int,
+    top_n_geos: int = 0,
     cadence_days: int = 1,
     date_from,
     date_to,
@@ -228,6 +244,12 @@ def build_mmm_panel(
     # country filter (skip if min_country_installs == 0)
     if min_country_installs > 0:
         panel = filter_countries(panel, min_country_installs)
+
+    # top-N geos by total install volume (preferred if set)
+    if top_n_geos > 0:
+        panel = keep_top_n_geos(panel, top_n_geos)
+        n_geos = panel.select(["platform", "country_code"]).unique().height
+        print(f"  kept top-{top_n_geos} (platform, country) geos → {n_geos} actual geos")
 
     # cadence aggregation (daily → N-day buckets)
     if cadence_days > 1:

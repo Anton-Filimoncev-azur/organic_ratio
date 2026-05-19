@@ -40,11 +40,13 @@ def main() -> None:
     print(f"Reading costs (raw):         {costs_path}")
 
     cadence_days = int(mmm_cfg.get("cadence_days", 1))
+    top_n_geos = int(mmm_cfg.get("top_n_geos", 0))
     panel, top_channels = build_mmm_panel(
         installs_path=installs_path,
         costs_path=costs_path,
         top_n_channels=int(mmm_cfg.top_n_channels),
         min_country_installs=int(mmm_cfg.min_country_installs),
+        top_n_geos=top_n_geos,
         cadence_days=cadence_days,
         date_from=cfg.train_start_date,
         date_to=cfg.test_end_date,
