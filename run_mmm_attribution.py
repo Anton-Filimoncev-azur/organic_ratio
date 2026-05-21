@@ -56,7 +56,11 @@ def main() -> None:
 
     # ----- Posterior mean contributions (scaled space) -----
     ch = post["channel_contribution"].mean(dim=("chain", "draw"))     # (date, geo, channel)
-    ctrl = post["control_contribution"].mean(dim=("chain", "draw")).sum("control")  # (date, geo)
+    if "control_contribution" in post.data_vars:
+        ctrl = post["control_contribution"].mean(dim=("chain", "draw")).sum("control")  # (date, geo)
+    else:
+        print("  no control_contribution in posterior — treating controls as 0")
+        ctrl = 0.0
     intercept = post["intercept_contribution"].mean(dim=("chain", "draw"))           # (geo,)
 
     print(f"  channel_contribution dims: {ch.dims}, shape: {ch.shape}")
